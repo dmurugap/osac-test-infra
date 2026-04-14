@@ -46,7 +46,7 @@ class FulfillmentCLI:
             run_strategy,
         ]
         if user_data_secret_ref is not None:
-            args.extend(["--user-data", user_data_secret_ref])
+            args.extend(["--user-data-secret-ref", user_data_secret_ref])
 
         stdout: str = run(*args)
         match: re.Match[str] | None = re.search(r"'([^']+)'", stdout)
