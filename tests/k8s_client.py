@@ -108,6 +108,50 @@ class K8sClient:
             resource="computeinstance", name=name, jsonpath="{.status.virtualMachineReference.namespace}"
         )
 
+    # VirtualNetwork queries
+
+    def get_virtual_network_name(self, *, uuid: str, checked: bool = True) -> str:
+        output, rc = self._get(
+            "get",
+            "virtualnetwork",
+            "-n",
+            self.namespace,
+            "-l",
+            f"osac.openshift.io/virtualnetwork-uuid={uuid}",
+            "-o",
+            "jsonpath={.items[0].metadata.name}",
+            checked=checked,
+        )
+        return output if rc == 0 else ""
+
+    def get_virtual_network_phase(self, *, name: str, checked: bool = True) -> str:
+        output, rc = self._get(
+            "get", "virtualnetwork", name, "-n", self.namespace, "-o", "jsonpath={.status.phase}", checked=checked
+        )
+        return output if rc == 0 else ""
+
+    # Subnet queries
+
+    def get_subnet_name(self, *, uuid: str, checked: bool = True) -> str:
+        output, rc = self._get(
+            "get",
+            "subnet",
+            "-n",
+            self.namespace,
+            "-l",
+            f"osac.openshift.io/subnet-uuid={uuid}",
+            "-o",
+            "jsonpath={.items[0].metadata.name}",
+            checked=checked,
+        )
+        return output if rc == 0 else ""
+
+    def get_subnet_phase(self, *, name: str, checked: bool = True) -> str:
+        output, rc = self._get(
+            "get", "subnet", name, "-n", self.namespace, "-o", "jsonpath={.status.phase}", checked=checked
+        )
+        return output if rc == 0 else ""
+
     # VirtualMachine/VMI queries (explicit namespace — may be on a different cluster)
 
     def get_vmi_creation_timestamp(self, *, vmi_namespace: str, compute_instance_name: str) -> str:

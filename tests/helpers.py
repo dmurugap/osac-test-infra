@@ -52,3 +52,63 @@ def wait_for_deletion(*, k8s: K8sClient, name: str) -> None:
         delay=5,
         description=f"{name} deletion",
     )
+
+
+def wait_for_virtual_network_cr(*, k8s: K8sClient, uuid: str) -> str:
+    return poll_until(
+        fn=lambda: k8s.get_virtual_network_name(uuid=uuid, checked=False),
+        until=lambda v: v != "",
+        retries=30,
+        delay=2,
+        description=f"VirtualNetwork CR for {uuid}",
+    )
+
+
+def wait_for_virtual_network_ready(*, k8s: K8sClient, name: str) -> None:
+    poll_until(
+        fn=lambda: k8s.get_virtual_network_phase(name=name, checked=False),
+        until=lambda v: v == "Ready",
+        retries=60,
+        delay=5,
+        description=f"{name} VirtualNetwork Ready",
+    )
+
+
+def wait_for_virtual_network_deletion(*, k8s: K8sClient, name: str) -> None:
+    poll_until(
+        fn=lambda: not k8s.is_present(resource="virtualnetwork", name=name),
+        until=lambda v: v is True,
+        retries=60,
+        delay=5,
+        description=f"{name} VirtualNetwork deletion",
+    )
+
+
+def wait_for_subnet_cr(*, k8s: K8sClient, uuid: str) -> str:
+    return poll_until(
+        fn=lambda: k8s.get_subnet_name(uuid=uuid, checked=False),
+        until=lambda v: v != "",
+        retries=30,
+        delay=2,
+        description=f"Subnet CR for {uuid}",
+    )
+
+
+def wait_for_subnet_ready(*, k8s: K8sClient, name: str) -> None:
+    poll_until(
+        fn=lambda: k8s.get_subnet_phase(name=name, checked=False),
+        until=lambda v: v == "Ready",
+        retries=60,
+        delay=5,
+        description=f"{name} Subnet Ready",
+    )
+
+
+def wait_for_subnet_deletion(*, k8s: K8sClient, name: str) -> None:
+    poll_until(
+        fn=lambda: not k8s.is_present(resource="subnet", name=name),
+        until=lambda v: v is True,
+        retries=60,
+        delay=5,
+        description=f"{name} Subnet deletion",
+    )

@@ -1,9 +1,9 @@
 REPORTS_DIR ?= reports
 
-.PHONY: test-vmaas lint format
+.PHONY: test lint format
 
-test-vmaas:
-	pytest tests/vmaas/ -v $(if $(TEST),-k "$(TEST)") --junitxml=$(REPORTS_DIR)/vmaas.xml
+test:
+	pytest tests/ -v $(if $(TEST),-k "$(TEST)") --junitxml=$(REPORTS_DIR)/results.xml
 
 lint:
 	ruff check tests/

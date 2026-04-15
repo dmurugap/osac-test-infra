@@ -36,3 +36,42 @@ class GRPCClient:
                 "updateMask": {"paths": ["spec.restart_requested_at"]},
             },
         )
+
+    # VirtualNetwork operations
+
+    def create_virtual_network(self, *, name: str, network_class: str, ipv4_cidr: str) -> str:
+        response: dict[str, Any] = self.call(
+            service=f"{PUBLIC_API}.VirtualNetworks/Create",
+            data={
+                "object": {"metadata": {"name": name}, "spec": {"network_class": network_class, "ipv4_cidr": ipv4_cidr}}
+            },
+        )
+        return response["object"]["id"]
+
+    def list_virtual_network_ids(self) -> list[str]:
+        response: dict[str, Any] = self.call(service=f"{PUBLIC_API}.VirtualNetworks/List")
+        return [item["id"] for item in response.get("items", [])]
+
+    def delete_virtual_network(self, *, vn_id: str) -> None:
+        self.call(service=f"{PUBLIC_API}.VirtualNetworks/Delete", data={"id": vn_id})
+
+    # Subnet operations
+
+    def create_subnet(self, *, name: str, virtual_network: str, ipv4_cidr: str) -> str:
+        response: dict[str, Any] = self.call(
+            service=f"{PUBLIC_API}.Subnets/Create",
+            data={
+                "object": {
+                    "metadata": {"name": name},
+                    "spec": {"virtual_network": virtual_network, "ipv4_cidr": ipv4_cidr},
+                }
+            },
+        )
+        return response["object"]["id"]
+
+    def list_subnet_ids(self) -> list[str]:
+        response: dict[str, Any] = self.call(service=f"{PUBLIC_API}.Subnets/List")
+        return [item["id"] for item in response.get("items", [])]
+
+    def delete_subnet(self, *, subnet_id: str) -> None:
+        self.call(service=f"{PUBLIC_API}.Subnets/Delete", data={"id": subnet_id})
