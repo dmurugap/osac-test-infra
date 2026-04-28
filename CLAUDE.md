@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-This repository contains Ansible-based test infrastructure for OSAC end-to-end testing. It focuses on testing hub creation and ComputeInstance lifecycle management through the OSAC fulfillment service using gRPC APIs and the fulfillment-cli tool.
+This repository contains Ansible-based test infrastructure for OSAC end-to-end testing. It focuses on testing hub creation and ComputeInstance lifecycle management through the OSAC fulfillment service using gRPC APIs and the osac CLI tool.
 
 ## Architecture
 
@@ -13,7 +13,7 @@ This repository contains Ansible-based test infrastructure for OSAC end-to-end t
 - `roles/` - Reusable Ansible roles for test functionality
   - `test_compute_instance_creation/` - Role for ComputeInstance creation, verification, and cleanup
   - `test_hub_creation/` - Role for hub creation, verification, and cleanup
-  - `fulfillment_cli_base/` - Base role for fulfillment CLI operations (dependency)
+  - `osac_cli_base/` - Base role for osac CLI operations (dependency)
 - `inventory/` - Ansible inventory and group variables
   - `group_vars/all.yml` - Global configuration variables
 - `retry/` - Ansible retry files for failed playbook runs
@@ -21,18 +21,18 @@ This repository contains Ansible-based test infrastructure for OSAC end-to-end t
 ### Core Components
 
 **Hub Creation Testing**
-- Hub creation and registration using fulfillment-cli
+- Hub creation and registration using osac CLI
 - Hub verification through gRPC API calls (private.v1.Hubs/Get)
 - Automated cleanup of hub resources and temporary files
 
 **ComputeInstance Lifecycle Testing**
-- ComputeInstance creation using fulfillment-cli with OSAC templates
+- ComputeInstance creation using osac CLI with OSAC templates
 - gRPC-based verification through the fulfillment service
 - Status monitoring and readiness checks
 - Automated cleanup and deletion
 
 **Communication Methods**
-- `fulfillment-cli` for hub/ComputeInstance creation operations
+- `osac` for hub/ComputeInstance creation operations
 - `grpcurl` for direct API communication with fulfillment service
 - gRPC authentication using Bearer tokens from OpenShift service accounts
 
@@ -93,7 +93,7 @@ ansible-playbook playbooks/test_compute_instance_creation.yml --tags mrclean
 **Required for customization:**
 - `cluster_domain_suffix` - OpenShift cluster domain (e.g., "apps.hcp.local.lab")
 - `test_namespace` - Target namespace (default: "foobar")
-- `fulfillment_cli_path` - Path to fulfillment-cli binary
+- `osac_cli_path` - Path to osac binary
 
 **Auto-constructed addresses:**
 - `fulfillment_address` - Constructed as `{app_name}-{namespace}.{domain}:{port}`
@@ -127,7 +127,7 @@ All gRPC calls use insecure connections and require Bearer token authentication.
 ## Test Execution Flow
 
 1. **Setup**: Display test information and parameters
-2. **Creation**: Create hub/ComputeInstance using fulfillment-cli with specified parameters
+2. **Creation**: Create hub/ComputeInstance using osac CLI with specified parameters
 3. **Verification**: Verify registration via gRPC API
 4. **Monitoring**: Wait for resources to reach desired status
 5. **Cleanup**: Delete resources and remove temporary files

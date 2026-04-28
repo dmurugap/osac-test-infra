@@ -18,7 +18,7 @@
   ansible.builtin.command:
     cmd: >
       grpcurl -insecure
-      -H "Authorization: Bearer {{ fulfillment_cli_base_grpc_token_result.stdout }}"
+      -H "Authorization: Bearer {{ osac_cli_base_grpc_token_result.stdout }}"
       -d '{"id": "{{ test_hub.id }}"}'
       {{ fulfillment_address }}
       private.v1.Hubs/Get

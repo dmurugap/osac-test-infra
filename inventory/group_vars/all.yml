@@ -5,7 +5,7 @@
 mgmt_kubeconfig: "{{ ansible_env.KUBECONFIG }}"
 
 # Paths and executables
-fulfillment_cli_path: "fulfillment-cli"
+osac_cli_path: "osac"
 
 # Default test configuration
 test_namespace: foobar

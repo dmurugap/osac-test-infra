@@ -26,10 +26,10 @@
 
     - name: Execute deletion during provision test
       block:
-        - name: Create ComputeInstance via fulfillment-cli
+        - name: Create ComputeInstance via osac CLI
           ansible.builtin.command:
             cmd: >
-              {{ fulfillment_cli_path }} create computeinstance
+              {{ osac_cli_path }} create computeinstance
               --template osac.templates.ocp_virt_vm
           register: test_compute_instance_creation_result
           changed_when: test_compute_instance_creation_result.rc == 0
@@ -42,9 +42,9 @@
           tags:
             - test
 
-        - name: Get fulfillment-cli token for gRPC calls
+        - name: Get osac CLI token for gRPC calls
           ansible.builtin.include_role:
-            name: fulfillment_cli_base
+            name: osac_cli_base
           tags:
             - test
 
@@ -152,7 +152,7 @@
         - name: Delete ComputeInstance while provision is running
           ansible.builtin.command:
             cmd: >
-              {{ fulfillment_cli_path }} delete computeinstance
+              {{ osac_cli_path }} delete computeinstance
               {{ compute_instance_order_uuid }}
           register: test_compute_instance_deletion_result
           changed_when: test_compute_instance_deletion_result.rc == 0
@@ -383,7 +383,7 @@
           ansible.builtin.command:
             cmd: >
               grpcurl -insecure
-              -H "Authorization: Bearer {{ fulfillment_cli_base_grpc_token_result.stdout }}"
+              -H "Authorization: Bearer {{ osac_cli_base_grpc_token_result.stdout }}"
               {{ fulfillment_address }}
               fulfillment.v1.ComputeInstances/List
           register: test_compute_instance_verification_result

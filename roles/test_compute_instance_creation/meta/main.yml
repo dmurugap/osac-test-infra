@@ -13,8 +13,8 @@ galaxy_info:
         - all
 
 dependencies:
-  - role: fulfillment_cli_base
-    when: fulfillment_cli_base_required | default(true)
+  - role: osac_cli_base
+    when: osac_cli_base_required | default(true)
 
 collections:
   - ansible.builtin

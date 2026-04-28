@@ -24,7 +24,7 @@ galaxy_info:
     - hub
 
 dependencies:
-  - role: fulfillment_cli_base
+  - role: osac_cli_base
 
 collections:
   - kubernetes.core

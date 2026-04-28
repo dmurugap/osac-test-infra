@@ -1,5 +1,5 @@
 ---
-# E2E Test: ComputeInstance creation via fulfillment-cli with explicit spec fields
+# E2E Test: ComputeInstance creation via osac CLI with explicit spec fields
 #
 # Tests the full stack: CLI -> fulfillment-service -> operator -> provisioning
 # Verifies that explicit fields (cores, memoryGiB, image, bootDisk, runStrategy)
@@ -10,7 +10,7 @@
 #
 # Related:
 #   - MGMT-23103: https://issues.redhat.com/browse/MGMT-23103
-#   - CLI PR: https://github.com/osac-project/fulfillment-cli/pull/110
+#   - CLI source: https://github.com/osac-project/fulfillment-service/tree/main/internal/cmd/cli
 
 - name: OSAC ComputeInstance CLI Explicit Fields Test
   hosts: localhost
@@ -19,7 +19,7 @@
 
   vars:
     test_description: >-
-      Create ComputeInstance via fulfillment-cli with explicit spec fields
+      Create ComputeInstance via osac CLI with explicit spec fields
       and verify they propagate to the Kubernetes resource.
 
   tasks:

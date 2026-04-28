@@ -5,7 +5,7 @@ import re
 from tests.runner import run
 
 
-class FulfillmentCLI:
+class OsacCLI:
     def __init__(self, *, binary: str, address: str, token_script: str, namespace: str) -> None:
         self.binary: str = binary
         self.namespace: str = namespace

@@ -14,7 +14,7 @@ tests/
 ├── runner.py            # Execution primitives: run, run_unchecked, poll_until, env
 ├── k8s_client.py        # K8sClient — kubectl wrapper (hub + VM cluster)
 ├── grpc_client.py       # GRPCClient — grpcurl wrapper
-├── fulfillment_cli.py   # FulfillmentCLI — fulfillment-cli wrapper
+├── osac_cli.py          # OsacCLI — osac CLI wrapper
 └── vmaas/               # VMaaS test suite
     ├── test_compute_instance_creation.py          # Full VM lifecycle
     ├── test_compute_instance_delete_during_provision.py  # Delete while provisioning
@@ -31,7 +31,7 @@ roles/        # Legacy Ansible roles
 ### Prerequisites
 
 - Python 3.11+
-- `fulfillment-cli` binary (matching the deployed fulfillment-service version)
+- `osac` binary (matching the deployed fulfillment-service version)
 - `grpcurl` (Go binary: `go install github.com/fullstorydev/grpcurl/cmd/grpcurl@latest`)
 - `oc` / `kubectl` with cluster-admin access
 - A running OSAC deployment
@@ -72,7 +72,7 @@ All configuration via environment variables. Same vars work in local dev and CI.
 | `OSAC_FULFILLMENT_ADDRESS` | auto-derived | Fulfillment API address (`host:port`) |
 | `OSAC_VM_TEMPLATE` | `osac.templates.ocp_virt_vm` | ComputeInstance template to use |
 | `OSAC_SERVICE_ACCOUNT` | `admin` | ServiceAccount for token generation |
-| `FULFILLMENT_CLI_PATH` | `fulfillment-cli` | Path to the CLI binary |
+| `OSAC_CLI_PATH` | `osac` | Path to the CLI binary |
 | `TEST` | (none) | pytest `-k` filter — run only tests matching this name substring |
 
 ### Two-Kubeconfig Design

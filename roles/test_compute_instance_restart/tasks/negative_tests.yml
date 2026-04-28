@@ -23,7 +23,7 @@
       ansible.builtin.shell:
         cmd: |
           grpcurl -insecure \
-            -H "Authorization: Bearer {{ fulfillment_cli_base_grpc_token_result.stdout }}" \
+            -H "Authorization: Bearer {{ osac_cli_base_grpc_token_result.stdout }}" \
             -d '{"object": {"id": "{{ compute_instance_order_uuid }}", "spec": {"template": "{{ compute_instance_template }}", "restart_requested_at": "2020-01-01T00:00:00Z"}}, "updateMask": {"paths": ["spec.restart_requested_at"]}}' \
             {{ fulfillment_address }} \
             osac.public.v1.ComputeInstances/Update

@@ -7,7 +7,7 @@
   gather_facts: true
   vars:
     test_name: Hub Creation Test
-    test_description: Test creating and verifying a hub with fulfillment-cli
+    test_description: Test creating and verifying a hub with osac CLI
   tasks:
     - name: Display test information
       ansible.builtin.debug:

@@ -73,7 +73,7 @@
       TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
       echo "$TIMESTAMP"
       grpcurl -insecure \
-        -H "Authorization: Bearer {{ fulfillment_cli_base_grpc_token_result.stdout }}" \
+        -H "Authorization: Bearer {{ osac_cli_base_grpc_token_result.stdout }}" \
         -d '{
           "object": {
             "id": "{{ compute_instance_order_uuid }}",

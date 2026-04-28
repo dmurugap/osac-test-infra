@@ -23,7 +23,7 @@ This role tests the VM restart feature ([MGMT-22682](https://issues.redhat.com/b
 
 ## Dependencies
 
-- `fulfillment_cli_base` - Provides gRPC token and base functionality
+- `osac_cli_base` - Provides gRPC token and base functionality
 
 ## Variables
 

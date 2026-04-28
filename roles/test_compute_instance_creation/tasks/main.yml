@@ -1,8 +1,8 @@
 ---
-- name: Create ComputeInstance via fulfillment-cli
+- name: Create ComputeInstance via osac CLI
   ansible.builtin.command:
     cmd: >
-      {{ fulfillment_cli_path }} create computeinstance
+      {{ osac_cli_path }} create computeinstance
       --template {{ template }}
       --cores {{ cores | default(2) }}
       --memory-gib {{ memory_gib | default(4) }}
@@ -21,7 +21,7 @@
   ansible.builtin.command:
     cmd: >
       grpcurl -insecure
-      -H "Authorization: Bearer {{ fulfillment_cli_base_grpc_token_result.stdout }}"
+      -H "Authorization: Bearer {{ osac_cli_base_grpc_token_result.stdout }}"
       {{ fulfillment_address }}
       osac.public.v1.ComputeInstances/List
   register: test_compute_instance_verification_result
