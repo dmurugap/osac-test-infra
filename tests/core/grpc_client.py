@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from tests.runner import run
+from tests.core.runner import run
 
 PUBLIC_API: str = "osac.public.v1"
 PRIVATE_API: str = "osac.private.v1"

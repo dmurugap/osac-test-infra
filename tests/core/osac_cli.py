@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 
-from tests.runner import run
+from tests.core.runner import run
 
 
 class OsacCLI:

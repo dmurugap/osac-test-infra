@@ -1,3 +1,0 @@
----
-# CLI binary and configuration
-cli_binary: "{{ osac_cli_path }}"

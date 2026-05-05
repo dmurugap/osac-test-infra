@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from tests.k8s_client import K8sClient
-from tests.runner import poll_until
+from tests.core.k8s_client import K8sClient
+from tests.core.runner import poll_until
 
 
 def wait_for_cr(*, k8s: K8sClient, uuid: str) -> str:
@@ -131,11 +131,7 @@ def wait_for_cluster_ready(*, k8s: K8sClient, name: str) -> None:
         return phase
 
     poll_until(
-        fn=_check_phase,
-        until=lambda v: v == "Ready",
-        retries=120,
-        delay=15,
-        description=f"{name} ClusterOrder Ready",
+        fn=_check_phase, until=lambda v: v == "Ready", retries=120, delay=15, description=f"{name} ClusterOrder Ready"
     )
 
 

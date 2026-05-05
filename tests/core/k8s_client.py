@@ -4,7 +4,7 @@ import json
 import subprocess
 from typing import Any
 
-from tests.runner import run, run_unchecked
+from tests.core.runner import run, run_unchecked
 
 
 class K8sClient:
@@ -54,7 +54,6 @@ class K8sClient:
         if not output:
             return 0
         return len(output.strip().splitlines())
-
 
     # ComputeInstance queries
 
