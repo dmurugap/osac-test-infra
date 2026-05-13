@@ -34,4 +34,4 @@ split-on-trailing-comma = false
 select = ["E", "F", "W", "I", "UP", "ANN", "B", "SIM", "RUF"]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["ANN201"]
+"tests/*" = ["ANN101", "ANN201"]
