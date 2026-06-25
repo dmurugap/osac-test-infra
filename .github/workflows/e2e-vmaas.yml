@@ -205,8 +205,11 @@ jobs:
           if ${FLAVOR_EXISTS}; then
             if [[ -n "${REMOTE_DIGEST}" ]] && [[ "${REMOTE_DIGEST}" == "${LOCAL_DIGEST}" ]]; then
               echo "Flavor '${FLAVOR_NAME}' is up to date (digest: ${LOCAL_DIGEST}) — skipping pull."
+            elif [[ -n "${REMOTE_DIGEST}" ]] && [[ -z "${LOCAL_DIGEST}" ]]; then
+              echo "Flavor '${FLAVOR_NAME}' already present, seeding digest file (${REMOTE_DIGEST})."
+              echo "${REMOTE_DIGEST}" > "${DIGEST_FILE}"
             elif [[ -n "${REMOTE_DIGEST}" ]]; then
-              echo "Flavor '${FLAVOR_NAME}' exists but image changed (local: ${LOCAL_DIGEST:-none}, remote: ${REMOTE_DIGEST}) — deleting and re-pulling..."
+              echo "Flavor '${FLAVOR_NAME}' exists but image changed (local: ${LOCAL_DIGEST}, remote: ${REMOTE_DIGEST}) — deleting and re-pulling..."
               sudo python3 /usr/local/bin/cluster-tool flavors --delete "${FLAVOR_NAME}" 9>&- || true
               NEED_PULL=true
             else
