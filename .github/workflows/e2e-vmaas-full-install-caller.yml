@@ -37,3 +37,4 @@ jobs:
       test-filter: ${{ inputs.test-filter || '' }}
       installer-ref: ${{ inputs.installer-ref || 'main' }}
       image-overrides: ${{ inputs.image-overrides || '{}' }}
+      notify-on-failure: ${{ github.event_name == 'schedule' }}

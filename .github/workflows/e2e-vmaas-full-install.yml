@@ -94,6 +94,11 @@ on:
         required: false
         type: string
         default: ""
+      notify-on-failure:
+        description: "Send Slack notification on failure (typically set for scheduled runs)"
+        required: false
+        type: boolean
+        default: false
     outputs:
       result:
         description: "Test result: PASSED or FAILED"
@@ -186,7 +191,8 @@ jobs:
           secrets: |
             secret/data/osac/e2e/pull-secret dockerconfigjson | PULL_SECRET ;
             secret/data/osac/e2e/aap-license license | AAP_LICENSE ;
-            secret/data/osac/e2e/snapshot-registry dockerconfigjson | SNAPSHOT_REGISTRY_AUTH
+            secret/data/osac/e2e/snapshot-registry dockerconfigjson | SNAPSHOT_REGISTRY_AUTH ;
+            secret/data/osac/e2e/slack-webhook-url url | SLACK_WEBHOOK_URL
 
       - name: Write secrets
         env:
@@ -583,3 +589,15 @@ jobs:
           # COMPONENT_IMAGE is set by the build step via GITHUB_ENV;
           # it will be empty if no component was built.
         run: bash .github/scripts/teardown.sh
+
+      - name: Notify Slack on failure
+        if: always() && failure() && inputs.notify-on-failure
+        uses: ./.github/actions/notify-slack
+        with:
+          status: failure
+          workflow-name: "E2E VMaaS Full Install"
+          slack-webhook-url: ${{ steps.vault.outputs.SLACK_WEBHOOK_URL }}
+          workflow-url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          branch-name: ${{ github.ref_name }}
+          commit-sha: ${{ github.sha }}
+          artifact-url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}#artifacts
