@@ -127,18 +127,6 @@ jobs:
       FLAVOR_LOCK: "/tmp/cluster-tool-flavor-${{ inputs.flavor-name }}.lock"
 
     steps:
-      - name: Set clone name
-        id: clone-name
-        env:
-          SUITE: ${{ inputs.test-suite || 'e2e' }}
-          RUN_ID: ${{ github.run_id }}
-        run: |
-          # Sanitize suite to lowercase alphanumeric/hyphens only
-          SUITE=$(echo "${SUITE}" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]//g')
-          CLONE_NAME="${SUITE:0:1}${RUN_ID: -7}-${SUITE}"
-          echo "CLONE_NAME=${CLONE_NAME}" >> "$GITHUB_ENV"
-          echo "clone-name=${CLONE_NAME}" >> "$GITHUB_OUTPUT"
-
       - name: Checkout repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
@@ -146,128 +134,31 @@ jobs:
           ref: ${{ inputs.test-infra-ref || '' }}
           persist-credentials: false
 
-      - name: Validate component inputs
-        if: inputs.component-repo != ''
-        env:
-          COMPONENT_REPO: ${{ inputs.component-repo }}
-          COMPONENT_REF: ${{ inputs.component-ref }}
-          COMPONENT_IMAGE_KEY: ${{ inputs.component-image-key }}
-        run: |
-          # --- Validate component inputs ---
-          if [[ -z "${COMPONENT_REF}" ]] || [[ -z "${COMPONENT_IMAGE_KEY}" ]]; then
-            echo "::error::component-repo requires component-ref and component-image-key"
-            exit 1
-          fi
-
-          # Repo must be "org/name" format
-          if [[ ! "${COMPONENT_REPO}" =~ ^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$ ]]; then
-            echo "::error::component-repo '${COMPONENT_REPO}' is not a valid org/repo format"
-            exit 1
-          fi
-
-      # --- Secret bootstrap (inline — must not run PR-controlled code) ---
-      - name: Read AppRole credentials
-        id: approle
-        run: |
-          APPROLE_DIR="${HOME}/.vault-server/.approle"
-          echo "role-id=$(cat "${APPROLE_DIR}/role-id")" >> "$GITHUB_OUTPUT"
-          echo "::add-mask::$(cat "${APPROLE_DIR}/secret-id")"
-          echo "secret-id=$(cat "${APPROLE_DIR}/secret-id")" >> "$GITHUB_OUTPUT"
-
-      - name: Retrieve GitHub token from Vault
-        id: vault-github
-        uses: hashicorp/vault-action@892a26828f195e65540a40b4768ae4571f51ebfc # v4
+      - name: Validate and bootstrap
+        id: setup
+        uses: ./.github/actions/validate-and-bootstrap
         with:
-          url: http://127.0.0.1:8200
-          method: approle
-          roleId: ${{ steps.approle.outputs.role-id }}
-          secretId: ${{ steps.approle.outputs.secret-id }}
-          exportEnv: false
-          secrets: |
-            secret/data/osac/e2e/github-token token | GH_ORG_TOKEN
+          test-suite: ${{ inputs.test-suite || 'e2e' }}
+          run-id: ${{ github.run_id }}
+          component-repo: ${{ inputs.component-repo }}
+          component-ref: ${{ inputs.component-ref }}
+          component-image-key: ${{ inputs.component-image-key }}
 
-      - name: Validate fork PR authorization
+      - name: Authorize fork PR
         if: inputs.fork-pr-author-association != ''
-        env:
-          PR_AUTHOR: ${{ inputs.fork-pr-author }}
-          PR_NUMBER: ${{ inputs.pr-number }}
-          PR_REPO: ${{ github.repository }}
-          GH_TOKEN: ${{ steps.vault-github.outputs.GH_ORG_TOKEN }}
-        run: |
-          # Tier 0: check for ok-to-test label (set by /ok-to-test command)
-          if [[ -n "${PR_NUMBER}" ]]; then
-            HTTP_CODE=$(curl -s -o /tmp/labels.json -w '%{http_code}' \
-              -H "Authorization: Bearer ${GH_TOKEN}" \
-              -H "Accept: application/vnd.github+json" \
-              "https://api.github.com/repos/${PR_REPO}/issues/${PR_NUMBER}/labels")
-            if [[ "${HTTP_CODE}" == "200" ]]; then
-              if jq -e '[.[].name] | index("ok-to-test")' /tmp/labels.json > /dev/null 2>&1; then
-                echo "Fork PR authorized: 'ok-to-test' label found on PR #${PR_NUMBER}."
-                exit 0
-              fi
-            else
-              echo "::warning::Failed to fetch labels for PR #${PR_NUMBER} (HTTP ${HTTP_CODE}), skipping label check."
-            fi
-          fi
-
-          # Tier 1: check org membership (author_association is unreliable for org members)
-          HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' \
-            -H "Authorization: Bearer ${GH_TOKEN}" \
-            -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/orgs/osac-project/members/${PR_AUTHOR}")
-          if [[ "${HTTP_CODE}" == "204" ]]; then
-            echo "Fork PR authorized: '${PR_AUTHOR}' is an osac-project org member."
-            exit 0
-          fi
-
-          echo "::error::Fork PR blocked: '${PR_AUTHOR}' is not an osac-project org member."
-          echo "::error::An org member can approve this PR for testing by commenting /ok-to-test"
-          exit 1
-
-      - name: Retrieve E2E secrets from Vault
-        id: vault
-        uses: hashicorp/vault-action@892a26828f195e65540a40b4768ae4571f51ebfc # v4
+        uses: ./.github/actions/authorize-fork-pr
         with:
-          url: http://127.0.0.1:8200
-          method: approle
-          roleId: ${{ steps.approle.outputs.role-id }}
-          secretId: ${{ steps.approle.outputs.secret-id }}
-          exportEnv: false
-          secrets: |
-            secret/data/osac/e2e/pull-secret dockerconfigjson | PULL_SECRET ;
-            secret/data/osac/e2e/aap-license license | AAP_LICENSE ;
-            secret/data/osac/e2e/snapshot-registry dockerconfigjson | SNAPSHOT_REGISTRY_AUTH ;
-            secret/data/osac/e2e/slack-webhook-url url | SLACK_WEBHOOK_URL
+          role-id: ${{ steps.setup.outputs.role-id }}
+          secret-id: ${{ steps.setup.outputs.secret-id }}
+          fork-pr-author: ${{ inputs.fork-pr-author }}
+          pr-number: ${{ inputs.pr-number }}
 
-      - name: Write secrets
-        env:
-          PULL_SECRET: ${{ steps.vault.outputs.PULL_SECRET }}
-          AAP_LICENSE: ${{ steps.vault.outputs.AAP_LICENSE }}
-          SNAPSHOT_REGISTRY_AUTH: ${{ steps.vault.outputs.SNAPSHOT_REGISTRY_AUTH }}
-        run: |
-          mkdir -p "${HOME}/.config/containers"
-
-          # Merge OCP pull-secret with snapshot registry auth into a single
-          # auth file.  The snapshot secret uses a path-scoped key
-          # (quay.io/rh-ee-ovishlit) so it won't conflict with the OCP
-          # quay.io entry.
-          jq -s '.[0].auths * .[1].auths | {auths: .}' \
-            <(printf '%s' "${PULL_SECRET}") \
-            <(printf '%s' "${SNAPSHOT_REGISTRY_AUTH}") \
-            > "${HOME}/.config/containers/auth.json"
-          chmod 600 "${HOME}/.config/containers/auth.json"
-
-          # cluster-tool runs via sudo (root), so root's skopeo needs the
-          # same auth file for pulling from private registries.
-          sudo mkdir -p /root/.config/containers
-          sudo cp "${HOME}/.config/containers/auth.json" /root/.config/containers/auth.json
-          sudo chmod 600 /root/.config/containers/auth.json
-
-          printf '%s' "${PULL_SECRET}" > "$RUNNER_TEMP/pull-secret.json"
-          chmod 600 "$RUNNER_TEMP/pull-secret.json"
-
-          printf '%s' "${AAP_LICENSE}" | base64 -d > "$RUNNER_TEMP/aap-license.zip"
-          chmod 600 "$RUNNER_TEMP/aap-license.zip"
+      - name: Fetch and write secrets
+        id: secrets
+        uses: ./.github/actions/fetch-and-write-secrets
+        with:
+          role-id: ${{ steps.setup.outputs.role-id }}
+          secret-id: ${{ steps.setup.outputs.secret-id }}
 
       - name: Prepare cluster environment
         env:
@@ -629,7 +520,7 @@ jobs:
       - name: Teardown
         if: always()
         env:
-          CLONE_NAME: ${{ steps.clone-name.outputs.clone-name }}
+          CLONE_NAME: ${{ steps.setup.outputs.clone-name }}
           E2E_IMAGE: "osac-e2e-tests:${{ github.run_id }}"
           # COMPONENT_IMAGE is set by the build step via GITHUB_ENV;
           # it will be empty if no component was built.
@@ -641,7 +532,7 @@ jobs:
         with:
           status: failure
           workflow-name: "E2E VMaaS Full Install"
-          slack-webhook-url: ${{ steps.vault.outputs.SLACK_WEBHOOK_URL }}
+          slack-webhook-url: ${{ steps.secrets.outputs.SLACK_WEBHOOK_URL }}
           workflow-url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           branch-name: ${{ github.ref_name }}
           commit-sha: ${{ github.sha }}
