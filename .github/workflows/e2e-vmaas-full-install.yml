@@ -323,8 +323,10 @@ jobs:
             oc debug "node/${NODE_NAME}" -t=false -- \
               chroot /host podman load
 
-          # Pass image tag for teardown cleanup
+          # Pass image tag and component metadata for teardown and downstream steps
           echo "COMPONENT_IMAGE=${COMPONENT_TAG}" >> "$GITHUB_ENV"
+          echo "COMPONENT_REPO_NAME=${COMPONENT_REPO}" >> "$GITHUB_ENV"
+          echo "COMPONENT_REF_NAME=${COMPONENT_REF}" >> "$GITHUB_ENV"
 
           rm -rf "$RUNNER_TEMP/component-src"
 
@@ -441,6 +443,7 @@ jobs:
           export INGRESS_SERVICE=true
           export VIRT_SERVICE=true
           export STORAGE_SERVICE=true
+
           bash scripts/setup.sh
 
           # --- Merge component image into overrides ---
@@ -468,6 +471,17 @@ jobs:
                 jq -c --arg k "${COMPONENT_IMAGE_KEY}" --arg v "${COMPONENT_IMAGE}" '. + {($k): $v}')
               echo "Component image override: ${COMPONENT_IMAGE_KEY}=${COMPONENT_IMAGE}"
             fi
+          fi
+
+          # When testing an osac-aap PR, also override the AAP project SCM
+          # branch/URI so the project syncs to the PR ref during bootstrap.
+          if [[ "${COMPONENT_IMAGE_KEY}" == "aap.bootstrap.image" && -n "${COMPONENT_REF_NAME:-}" ]]; then
+            AAP_GIT_URI="https://github.com/${COMPONENT_REPO_NAME}"
+            MERGED_OVERRIDES=$(echo "${MERGED_OVERRIDES}" | \
+              jq -c --arg bk "aap.configAsCode.projectGitBranch" --arg bv "${COMPONENT_REF_NAME}" \
+                    --arg uk "aap.configAsCode.projectGitUri" --arg uv "${AAP_GIT_URI}" \
+                    '. + {($bk): $bv, ($uk): $uv}')
+            echo "AAP project override: branch=${COMPONENT_REF_NAME} uri=${AAP_GIT_URI}"
           fi
 
           # --- Apply image overrides ---
