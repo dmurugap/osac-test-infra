@@ -25,8 +25,23 @@ OUTPUT_FILE="${TEXTFILE_DIR}/osac_service_health.prom"
 
 mkdir -p "${TEXTFILE_DIR}"
 
-# Fixed units present on every runner machine.
-UNITS=(libvirtd.service haproxy.service podman.socket)
+# Fixed units present on every runner machine. libvirtd is checked
+# separately below: CentOS Stream 10 hosts split between the legacy
+# monolithic libvirtd.service and the modular virtqemud.service depending
+# on how/when they were provisioned, and both are equally valid running
+# states (confirmed live: osac-9 runs VMs under virtqemud with
+# libvirtd.service never having started since boot). Alerting on either
+# unit by name alone false-pages on whichever mode a given host doesn't use.
+UNITS=(haproxy.service podman.socket)
+
+# Whether libvirt is available, either daemon mode. Checked via the SOCKET
+# units, not the .service units: both daemons are socket-activated and their
+# .service idles back to inactive after a timeout with no active connection
+# (confirmed live: virtqemud.service reads inactive on hosts with no VM
+# currently running, even though libvirt is fully available on demand). The
+# socket units stay persistently active regardless of idle state, so they're
+# the reliable "is libvirt available" signal.
+LIBVIRT_SOCKETS=(libvirtd.socket virtqemud.socket)
 
 # GitHub Actions runner agent(s) -- a machine can have one or several
 # runner-NN instances (see scripts/runners/action-runners-setup.sh), so
@@ -47,6 +62,18 @@ tmp="$(mktemp "${TEXTFILE_DIR}/.osac_service_health.XXXXXX")"
         fi
         echo "osac_service_active{unit=\"${unit}\"} ${state}"
     done
+
+    # Synthetic aggregate: healthy if EITHER libvirt daemon's socket is
+    # active (see LIBVIRT_SOCKETS comment above). "libvirt" is not a real
+    # systemd unit name.
+    libvirt_state=0
+    for sock in "${LIBVIRT_SOCKETS[@]}"; do
+        if systemctl is-active --quiet "${sock}" 2>/dev/null; then
+            libvirt_state=1
+            break
+        fi
+    done
+    echo "osac_service_active{unit=\"libvirt\"} ${libvirt_state}"
 } > "${tmp}"
 
 # node_exporter's textfile collector watches the DIRECTORY, not a specific
