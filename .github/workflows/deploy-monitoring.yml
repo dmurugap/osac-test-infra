@@ -150,6 +150,13 @@ jobs:
             [[ -z "${label}" ]] && continue
             echo "=== Updating ${label} (${host}) ==="
 
+            if ! ssh "${SSH_OPTS[@]}" "github-runner@${host}" \
+                 "mkdir -p ${SYNC_DIR}/monitoring"; then
+              echo "ERROR: mkdir on ${label} (${host}) failed"
+              FAILED_HOSTS+=("${label}")
+              continue
+            fi
+
             if ! rsync -az --delete -e "ssh ${SSH_OPTS[*]}" \
                  monitoring/ "github-runner@${host}:${SYNC_DIR}/monitoring/"; then
               echo "ERROR: rsync to ${label} (${host}) failed"
