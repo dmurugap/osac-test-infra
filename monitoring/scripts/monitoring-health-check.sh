@@ -5,6 +5,14 @@
 # and adjusts checks accordingly.
 set -euo pipefail
 
+# `systemctl --user` needs XDG_RUNTIME_DIR/DBUS_SESSION_BUS_ADDRESS to reach
+# the user's systemd/dbus instance -- see the same defaulting in
+# monitoring-setup.sh (OSAC-2204). This script is invoked as its own
+# workflow step (fresh shell), so it doesn't inherit that script's exports
+# and needs the same fallback independently.
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=${XDG_RUNTIME_DIR}/bus}"
+
 MONITORING_HOME="${MONITORING_HOME:-${HOME}/.monitoring-server}"
 
 passed=0
