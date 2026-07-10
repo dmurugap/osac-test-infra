@@ -2,6 +2,8 @@
 
 Unified repo for OSAC end-to-end testing. Provisions infrastructure via pluggable backends and runs pytest test suites against it.
 
+**AI coding agents**: see [AGENTS.md](AGENTS.md) for test framework architecture, fixtures, and conventions. Claude Code additionally reads [CLAUDE.md](CLAUDE.md) for pytest configuration and environment variables.
+
 ## Architecture
 
 The repo has two layers:
@@ -158,6 +160,8 @@ All configuration via environment variables.
 | `INFRA` | `netris` | Infrastructure backend |
 | `SUITE` | `caas` | Test suite |
 | `EXTRA_VARS` | (none) | Extra variables passed to the backend |
+
+See [AGENTS.md](AGENTS.md) for the fuller env var reference used by the pytest fixtures themselves (JWT auth, per-suite test patterns, debugging).
 
 ## Adding a New Backend
 

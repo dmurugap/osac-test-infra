@@ -1,141 +1,125 @@
+@AGENTS.md
+
 # CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Overview
 
-This repository contains Ansible-based test infrastructure for OSAC end-to-end testing. It focuses on testing hub creation and ComputeInstance lifecycle management through the OSAC fulfillment service using gRPC APIs and the osac CLI tool.
+This repository contains pytest-based E2E test infrastructure for OSAC. Tests exercise the fulfillment API (gRPC/REST), Kubernetes CRs, and multi-cluster provisioning flows. Focus areas: VMaaS (ComputeInstance), CaaS (ClusterOrder), storage, and catalog APIs.
 
 ## Architecture
 
 ### Directory Structure
-- `playbooks/` - Main Ansible playbooks for executing tests
-- `roles/` - Reusable Ansible roles for test functionality
-  - `test_compute_instance_creation/` - Role for ComputeInstance creation, verification, and cleanup
-  - `test_hub_creation/` - Role for hub creation, verification, and cleanup
-  - `osac_cli_base/` - Base role for osac CLI operations (dependency)
-- `inventory/` - Ansible inventory and group variables
-  - `group_vars/all.yml` - Global configuration variables
-- `retry/` - Ansible retry files for failed playbook runs
+
+- `tests/` - Pytest test suites
+  - `vmaas/` - ComputeInstance lifecycle tests
+  - `caas/` - ClusterOrder lifecycle tests
+  - `storage/` - Tenant storage tests
+  - `catalog/` - CatalogItem tests
+  - `core/` - Client wrappers (grpc_client, k8s_client, osac_cli) and helpers
+  - `conftest.py` - Session fixtures (cli, grpc, k8s_hub_client, jwt tokens)
 
 ### Core Components
 
-**Hub Creation Testing**
-- Hub creation and registration using osac CLI
-- Hub verification through gRPC API calls (private.v1.Hubs/Get)
-- Automated cleanup of hub resources and temporary files
-
-**ComputeInstance Lifecycle Testing**
-- ComputeInstance creation using osac CLI with OSAC templates
-- gRPC-based verification through the fulfillment service
-- Status monitoring and readiness checks
-- Automated cleanup and deletion
+**Pytest Test Framework**
+- Session-scoped fixtures for clients (gRPC, K8s, CLI) and authentication tokens
+- Client abstractions: GRPCClient (grpcurl wrapper), K8sClient (kubectl wrapper), OsacCLI
+- Polling utilities: `poll_until`, `wait_for_*` helpers for state transitions
+- Multi-cluster support: hub cluster (CRs) + workload cluster (VMs)
 
 **Communication Methods**
-- `osac` for hub/ComputeInstance creation operations
-- `grpcurl` for direct API communication with fulfillment service
-- gRPC authentication using Bearer tokens from OpenShift service accounts
+- `osac` CLI for resource creation operations (automatic token refresh)
+- `grpcurl` for direct gRPC API calls (public/private fulfillment API)
+- `kubectl` for Kubernetes CR inspection and status verification
+- Bearer token authentication via ServiceAccount tokens or Keycloak JWT
 
 ## Development Commands
 
 ### Code Quality
 ```bash
-# Run pre-commit hooks (yamllint, ansible-lint, etc.)
+# Run linters
+make lint    # ruff check
+
+# Format code
+make format  # ruff format
+
+# Run pre-commit hooks
 pre-commit run --all-files
-
-# Run yamllint specifically
-yamllint --strict *.yml *.yaml
-
-# Run ansible-lint specifically
-ansible-lint
 ```
 
 ### Running Tests
 
-Execute hub creation test:
 ```bash
-ansible-playbook playbooks/test_hub_creation.yml -e test_hub_id=my-test-hub-001 -e test_namespace=foobar
-```
+# Run all tests (parallel, 4 workers)
+make test
 
-Execute ComputeInstance creation test:
-```bash
-ansible-playbook playbooks/test_compute_instance_creation.yml -e test_compute_instance_id=my-test-ci-001 -e test_namespace=foobar
-```
+# Run specific test suites
+make test-vmaas
+make test-caas
+make test-storage
 
-### Test Tags
+# Run single test by name
+TEST=test_compute_instance_lifecycle make test-vmaas
 
-Use tags to run specific parts of tests:
-- `info` - Display test information and resource listings
-- `test` - Run actual creation tests (hub_creation, compute_instance_creation)
-- `validation` - Resource verification and status checks
-- `cleanup` - Resource deletion and file cleanup
-- `mrclean` - Mass cleanup of test ComputeInstances with e2e-test-ci- prefix
-
-Examples:
-```bash
-# Run only hub creation without cleanup
-ansible-playbook playbooks/test_hub_creation.yml --tags test
-
-# Run only ComputeInstance creation without cleanup
-ansible-playbook playbooks/test_compute_instance_creation.yml --tags test
-
-# Run only cleanup operations
-ansible-playbook playbooks/test_compute_instance_creation.yml --tags cleanup
-
-# Mass cleanup of all test ComputeInstances
-ansible-playbook playbooks/test_compute_instance_creation.yml --tags mrclean
+# Sequential execution (for debugging)
+uv run pytest tests/vmaas/ -v --tb=short
 ```
 
 ## Configuration
 
-### Key Variables (inventory/group_vars/all.yml)
+All configuration via environment variables. Works identically in local dev and CI.
 
-**Required for customization:**
-- `cluster_domain_suffix` - OpenShift cluster domain (e.g., "apps.hcp.local.lab")
-- `test_namespace` - Target namespace (default: "foobar")
-- `osac_cli_path` - Path to osac binary
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OSAC_NAMESPACE` | `osac-devel` | Namespace where OSAC is deployed |
+| `KUBECONFIG` | `~/.kube/config` | Kubeconfig for the hub (management cluster) |
+| `OSAC_VM_KUBECONFIG` | **(required)** | Kubeconfig for the VM cluster (where VirtualMachines run). In single-cluster setups, set this to the same value as `KUBECONFIG`. |
+| `OSAC_FULFILLMENT_ADDRESS` | auto-derived | Fulfillment API address (`host:port`) |
+| `OSAC_VM_TEMPLATE` | `osac.templates.ocp_virt_vm` | ComputeInstance template to use |
+| `OSAC_SERVICE_ACCOUNT` | `admin` | ServiceAccount for token generation |
+| `OSAC_CLI_PATH` | `osac` | Path to the CLI binary |
+| `TEST` | (none) | pytest `-k` filter — run only tests matching this name substring |
 
-**Auto-constructed addresses:**
-- `fulfillment_address` - Constructed as `{app_name}-{namespace}.{domain}:{port}`
-- `fulfillment_token_script` - OpenShift token creation command
+### Two-Kubeconfig Design
 
-**Hub creation specific:**
-- `hub_service_account` - Service account for hub operations (default: "fulfillment-admin")
-- `hub_token_duration` - Token validity period (default: "1h")
+Tests access two clusters:
+- **Hub** (`KUBECONFIG`) — where ComputeInstance CRs, jobs, and the fulfillment service live
+- **VM cluster** (`OSAC_VM_KUBECONFIG`) — where VirtualMachine and VirtualMachineInstance resources live
 
-## ComputeInstance Template Configuration
+In single-cluster dev setups (VMs run on the hub): set `OSAC_VM_KUBECONFIG` to the same value as `KUBECONFIG`.
 
-Default ComputeInstance template: `cloudkit.templates.ocp_virt_vm`
-- CPU: 2 cores
-- Memory: 4GB
-- Disk: 20GB
-- Network: default
-- Ready timeout: 15 minutes
+In two-cluster setups: set `OSAC_VM_KUBECONFIG` to the virt cluster kubeconfig. The hub kubeconfig manages CRs, the VM kubeconfig verifies VM state.
+
+## Test Execution Pattern
+
+Standard pytest test flow:
+
+1. **Create**: Use CLI (`cli.create_compute_instance(...)`) or gRPC (`grpc.create_compute_instance(...)`) to create resource
+2. **Wait for CR**: `wait_for_cr(k8s=k8s_hub_client, uuid=resource_id)` (from `tests.core.helpers`)
+3. **Wait for provisioning**: `wait_for_provision(k8s=k8s_hub_client, name=name)`, then `wait_for_running(k8s=k8s_hub_client, name=name)`
+4. **Verify**: Check CR status via K8s (e.g. `k8s_hub_client.get_compute_instance_phase(name=name)`) and gRPC API (e.g. `grpc.get_compute_instance(ci_id=id)`)
+5. **Delete**: Use CLI or gRPC to delete resource
+6. **Verify removal**: `wait_for_deletion(k8s=k8s_hub_client, name=name)`
+
+All state transitions use polling utilities (`poll_until` in `tests/core/runner.py`, and the `wait_for_*` helpers in `tests/core/helpers.py` built on it) to handle async provisioning.
 
 ## gRPC API Operations
 
-**Hub Operations:**
-- `private.v1.Hubs/Get` - Get specific hub details
+**Common operations** (via `GRPCClient` fixture — resource-specific methods, not a generic verb-based call):
+- `grpc.list_compute_instance_ids()` — List resource IDs
+- `grpc.get_compute_instance(ci_id=id)` — Get specific resource
+- `grpc.create_compute_instance(catalog_item=..., subnet_ids=[...])` — Create resource
+- `grpc.delete_compute_instance(ci_id=id)` — Delete resource
+- Equivalent method sets exist for VirtualNetworks, Subnets, SecurityGroups, ClusterOrders, PublicIPs/Pools, catalog items, and InstanceTypes
+- `grpc.call(service="osac.public.v1.<Resource>/<Verb>", data={...})` — Lower-level escape hatch used internally by the methods above
 
-**ComputeInstance Operations:**
-- `private.v1.ComputeInstances/List` - List all ComputeInstances
-- `private.v1.ComputeInstances/Get` - Get specific ComputeInstance details
-- `private.v1.ComputeInstances/Delete` - Delete a ComputeInstance
-
-All gRPC calls use insecure connections and require Bearer token authentication.
-
-## Test Execution Flow
-
-1. **Setup**: Display test information and parameters
-2. **Creation**: Create hub/ComputeInstance using osac CLI with specified parameters
-3. **Verification**: Verify registration via gRPC API
-4. **Monitoring**: Wait for resources to reach desired status
-5. **Cleanup**: Delete resources and remove temporary files
-6. **Logging**: Record test results to test-execution.log
+All gRPC calls use insecure connections (`-insecure` flag) and require Bearer token authentication; the token is bound to the `GRPCClient` instance at construction (see the `grpc`/`jwt_grpc_tenant*` fixtures), not passed per call.
 
 ## Error Handling
 
-- Failed tests trigger automatic cleanup of temporary files
-- Resource deletion verification ensures proper cleanup
-- All operations include proper error logging and failure messages
-- Retry functionality available through Ansible retry files in `retry/` directory
+- Pytest fixtures handle cleanup via teardown hooks
+- `assert_grpc_rejected(exc_info, code)` validates expected gRPC failures, used with `pytest.raises(subprocess.CalledProcessError)`
+- `poll_until` includes configurable `retries`/`delay` (keyword-only, requires a `description`) for transient errors
+- Tests clean up resources explicitly via delete steps or fixture teardown
+- Failed tests leave resources in place for debugging (manual cleanup required)
