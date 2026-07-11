@@ -114,6 +114,11 @@ on:
         required: false
         type: boolean
         default: false
+      runner-label:
+        description: "Self-hosted runner label to target. Defaults to the shared fleet-wide label; override with a host-specific label (e.g. osac-ci-1) to pin a run to one machine for verification/debugging."
+        required: false
+        type: string
+        default: "osac-ci"
     outputs:
       result:
         description: "Test result: PASSED or FAILED"
@@ -121,7 +126,7 @@ on:
 
 jobs:
   e2e:
-    runs-on: osac-ci
+    runs-on: ${{ inputs.runner-label }}
     environment: e2e-test
     permissions:
       contents: read
