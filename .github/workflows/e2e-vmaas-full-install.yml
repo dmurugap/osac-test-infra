@@ -396,13 +396,11 @@ jobs:
       - name: Install infrastructure operators
         env:
           KUBECONFIG: ${{ runner.temp }}/kubeconfig
+          INSTALLER_NAMESPACE: ${{ inputs.namespace }}
           INSTALLER_REF: ${{ inputs.installer-ref }}
           INSTALLER_REPO: ${{ inputs.installer-repo }}
         run: |
-          # Ensure helm and yq are available (setup.sh requires helm). jq is
-          # not handled here -- machine-init.sh's install_packages step
-          # already installs it during machine provisioning, and github-runner's
-          # sudo is scoped to CI's actual needs, not open-ended package installs.
+          # Ensure helm and yq are available
           if ! command -v helm &>/dev/null; then
             curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
           fi
@@ -428,14 +426,11 @@ jobs:
             "https://github.com/${INSTALLER_REPO}.git" "${INSTALLER_DIR}"
           cd "${INSTALLER_DIR}"
 
-          # Install infrastructure operators only (LVMS, MetalLB, CNV)
-          export SETUP_PHASE=prerequisites
-          export DEPLOY_MODE=helm
-          export VALUES_FILE=values/vmaas-ci/values.yaml
-          export INGRESS_SERVICE=true
-          export VIRT_SERVICE=true
-          export STORAGE_SERVICE=true
-          bash scripts/setup.sh
+          # Phase 1: Install OLM operators
+          make install-operators VALUES_FILE=values/vmaas-ci/values.yaml
+
+          # Phase 2: Configure prerequisites (certificates, keycloak, operator CRs)
+          make install-prereqs VALUES_FILE=values/vmaas-ci/values.yaml
 
       - name: Install OSAC
         env:
@@ -451,15 +446,21 @@ jobs:
           INSTALLER_DIR="$RUNNER_TEMP/osac-installer"
           cd "${INSTALLER_DIR}"
 
-          # Deploy OSAC (skips already-installed infrastructure operators)
-          export SETUP_PHASE=deploy
-          export DEPLOY_MODE=helm
-          export VALUES_FILE=values/vmaas-ci/values.yaml
-          export INGRESS_SERVICE=true
-          export VIRT_SERVICE=true
-          export STORAGE_SERVICE=true
+          # Deploy OSAC via Helm (includes publish-templates and create-hub hooks)
+          make install-osac VALUES_FILE=values/vmaas-ci/values.yaml
 
-          bash scripts/setup.sh
+          # Create test tenants (CI-only — the Tenant CRD exists after helm install)
+          for tenant in "${INSTALLER_NAMESPACE}" shared; do
+            echo "Creating Tenant: ${tenant}"
+            oc apply -f - <<EOF
+          apiVersion: osac.openshift.io/v1alpha1
+          kind: Tenant
+          metadata:
+            name: ${tenant}
+            namespace: ${INSTALLER_NAMESPACE}
+          spec: {}
+          EOF
+          done
 
           # --- Merge component image into overrides ---
           # If a component image was built and loaded onto the node,
@@ -516,6 +517,7 @@ jobs:
             helm upgrade osac charts/osac/ \
               --namespace "${INSTALLER_NAMESPACE}" \
               --reuse-values \
+              --no-hooks \
               "${SET_ARGS[@]}" \
               --timeout 10m \
               --wait
