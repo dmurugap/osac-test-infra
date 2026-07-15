@@ -400,25 +400,27 @@ jobs:
           INSTALLER_REF: ${{ inputs.installer-ref }}
           INSTALLER_REPO: ${{ inputs.installer-repo }}
         run: |
-          # Ensure helm and yq are available
+          # Ensure helm, yq, and grpcurl are available
           if ! command -v helm &>/dev/null; then
             curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
           fi
+          TOOL_DIR="${RUNNER_TEMP}/bin"
+          mkdir -p "${TOOL_DIR}"
           if ! command -v yq &>/dev/null; then
-            # Pinned version + checksum verification, installed to a
-            # runner-owned directory -- no sudo needed, and no risk of
-            # trusting an unverified binary on the system PATH.
             YQ_VERSION="v4.53.3"
             YQ_SHA256="fa52a4e758c63d38299163fbdd1edfb4c4963247918bf9c1c5d31d84789eded4"
-            YQ_DIR="${RUNNER_TEMP}/bin"
-            mkdir -p "${YQ_DIR}"
-            curl -fsSL -o "${YQ_DIR}/yq" \
+            curl -fsSL -o "${TOOL_DIR}/yq" \
               "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64"
-            echo "${YQ_SHA256}  ${YQ_DIR}/yq" | sha256sum -c -
-            chmod +x "${YQ_DIR}/yq"
-            export PATH="${YQ_DIR}:${PATH}"
-            echo "${YQ_DIR}" >> "$GITHUB_PATH"
+            echo "${YQ_SHA256}  ${TOOL_DIR}/yq" | sha256sum -c -
+            chmod +x "${TOOL_DIR}/yq"
           fi
+          if ! command -v grpcurl &>/dev/null; then
+            GRPCURL_VERSION="1.9.1"
+            curl -fsSL "https://github.com/fullstorydev/grpcurl/releases/download/v${GRPCURL_VERSION}/grpcurl_${GRPCURL_VERSION}_linux_x86_64.tar.gz" \
+              | tar xz -C "${TOOL_DIR}" grpcurl
+          fi
+          export PATH="${TOOL_DIR}:${PATH}"
+          echo "${TOOL_DIR}" >> "$GITHUB_PATH"
 
           # Clone osac-installer (reused by the next step)
           INSTALLER_DIR="$RUNNER_TEMP/osac-installer"
@@ -525,6 +527,22 @@ jobs:
             echo "Waiting for rollout to complete..."
             for deploy in $(oc get deploy -n "${INSTALLER_NAMESPACE}" -o name); do
               oc rollout status "${deploy}" -n "${INSTALLER_NAMESPACE}" --timeout=300s
+            done
+
+            DOMAIN=$(oc get ingresses.config/cluster -o jsonpath='{.spec.domain}')
+            GRPC_ADDR="fulfillment-internal-api-${INSTALLER_NAMESPACE}.${DOMAIN}:443"
+            echo "Waiting for gRPC endpoint ${GRPC_ADDR} to be reachable..."
+            for i in $(seq 1 30); do
+              if grpcurl -insecure "${GRPC_ADDR}" grpc.health.v1.Health/Check; then
+                echo "gRPC endpoint reachable (attempt ${i})"
+                break
+              fi
+              if [ "${i}" -eq 30 ]; then
+                echo "gRPC endpoint not reachable after 30 attempts"
+                exit 1
+              fi
+              echo "Attempt ${i}/30 failed, retrying in 2s..."
+              sleep 2
             done
           fi
 
