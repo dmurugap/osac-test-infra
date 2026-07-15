@@ -181,7 +181,7 @@ import pytest
 from tests.core.helpers import assert_grpc_rejected
 
 with pytest.raises(subprocess.CalledProcessError) as exc_info:
-    grpc.create_public_ip(name="test-ip", pool=full_pool_id)
+    grpc.create_external_ip(name="test-ip", pool=full_pool_id)
 assert_grpc_rejected(exc_info, "FailedPrecondition")
 ```
 
@@ -190,7 +190,7 @@ assert_grpc_rejected(exc_info, "FailedPrecondition")
 **Exemplar tests**:
 - `tests/vmaas/test_compute_instance_creation.py` — Full create/provision/delete flow (`test_compute_instance_lifecycle` function)
 - `tests/vmaas/test_compute_instance_restart.py` — State transitions, field updates
-- `tests/caas/test_cluster_order_lifecycle.py` — ClusterOrder provisioning
+- `tests/caas/test_cluster_create.py` — ClusterOrder provisioning
 - `tests/vmaas/test_compute_instance_api_fields.py` — API/CLI field parity validation
 
 **Client implementations**:
@@ -274,7 +274,7 @@ kubectl -n $OSAC_NAMESPACE logs -l app=fulfillment-service --tail=100
 
 **Run locally**:
 ```bash
-make lint    # ruff check (not part of pre-commit)
+make lint    # ruff check + ruff format --check (not part of pre-commit)
 make format  # ruff format (not part of pre-commit)
 pre-commit run --all-files  # yamllint, ansible-lint, standard hooks
 ```

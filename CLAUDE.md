@@ -39,7 +39,7 @@ This repository contains pytest-based E2E test infrastructure for OSAC. Tests ex
 ### Code Quality
 ```bash
 # Run linters
-make lint    # ruff check
+make lint    # ruff check + ruff format --check
 
 # Format code
 make format  # ruff format
@@ -62,8 +62,8 @@ make test-storage
 # Run single test by name
 TEST=test_compute_instance_lifecycle make test-vmaas
 
-# Sequential execution (for debugging)
-uv run pytest tests/vmaas/ -v --tb=short
+# Sequential execution (for debugging; -n 0 overrides the default 4-worker parallelism)
+uv run pytest tests/vmaas/ -v --tb=short -n 0
 ```
 
 ## Configuration
@@ -74,7 +74,7 @@ All configuration via environment variables. Works identically in local dev and 
 |----------|---------|-------------|
 | `OSAC_NAMESPACE` | `osac-devel` | Namespace where OSAC is deployed |
 | `KUBECONFIG` | `~/.kube/config` | Kubeconfig for the hub (management cluster) |
-| `OSAC_VM_KUBECONFIG` | **(required)** | Kubeconfig for the VM cluster (where VirtualMachines run). In single-cluster setups, set this to the same value as `KUBECONFIG`. |
+| `OSAC_VM_KUBECONFIG` | *(required for vmaas tests)* | Kubeconfig for the VM cluster (where VirtualMachines run). In single-cluster setups, set this to the same value as `KUBECONFIG`. Only used by vmaas test suite. |
 | `OSAC_FULFILLMENT_ADDRESS` | auto-derived | Fulfillment API address (`host:port`) |
 | `OSAC_VM_TEMPLATE` | `osac.templates.ocp_virt_vm` | ComputeInstance template to use |
 | `OSAC_SERVICE_ACCOUNT` | `admin` | ServiceAccount for token generation |
@@ -111,7 +111,7 @@ All state transitions use polling utilities (`poll_until` in `tests/core/runner.
 - `grpc.get_compute_instance(ci_id=id)` — Get specific resource
 - `grpc.create_compute_instance(catalog_item=..., subnet_ids=[...])` — Create resource
 - `grpc.delete_compute_instance(ci_id=id)` — Delete resource
-- Equivalent method sets exist for VirtualNetworks, Subnets, SecurityGroups, ClusterOrders, PublicIPs/Pools, catalog items, and InstanceTypes
+- Equivalent method sets exist for VirtualNetworks, Subnets, SecurityGroups, ClusterOrders, ExternalIPs/Pools, catalog items, and InstanceTypes
 - `grpc.call(service="osac.public.v1.<Resource>/<Verb>", data={...})` — Lower-level escape hatch used internally by the methods above
 
 All gRPC calls use insecure connections (`-insecure` flag) and require Bearer token authentication; the token is bound to the `GRPCClient` instance at construction (see the `grpc`/`jwt_grpc_tenant*` fixtures), not passed per call.
