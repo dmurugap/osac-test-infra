@@ -14,6 +14,11 @@ on:
         required: false
         type: string
         default: ""
+      test-marker:
+        description: "pytest -m marker expression (e.g. sanity, regression). Empty runs all."
+        required: false
+        type: string
+        default: ""
       namespace:
         description: "OSAC namespace on the cluster"
         required: false
@@ -663,6 +668,7 @@ jobs:
         env:
           TEST_SUITE: ${{ inputs.test-suite }}
           TEST_FILTER: ${{ inputs.test-filter }}
+          TEST_MARKER: ${{ inputs.test-marker }}
           OSAC_NAMESPACE: ${{ inputs.namespace }}
           OSAC_BMI_TEMPLATE: ${{ inputs.bmi-template }}
           OSAC_BMH_NAMESPACE: ${{ inputs.bmh-namespace }}
@@ -670,14 +676,26 @@ jobs:
         run: |
           KUBECONFIG_PATH="$RUNNER_TEMP/kubeconfig"
 
-          TEST_ARGS="tests/"
+          TEST_ARGS=("tests/")
           if [ -n "${TEST_SUITE}" ]; then
-            TEST_ARGS="tests/${TEST_SUITE}/"
+            TEST_ARGS=("tests/${TEST_SUITE}/")
           fi
 
-          FILTER_ARGS=""
+          FILTER_ARGS=()
           if [ -n "${TEST_FILTER}" ]; then
-            FILTER_ARGS="-k ${TEST_FILTER}"
+            FILTER_ARGS=(-k "${TEST_FILTER}")
+          fi
+
+          MARKER_ARGS=()
+          if [ -n "${TEST_MARKER}" ]; then
+            MARKER_ARGS=(-m "${TEST_MARKER}")
+          fi
+
+          # Single marker cohort (sanity XOR regression) → one BMH-consuming path → -n 4.
+          # Full suite (no marker) can run lifecycle + inventory together → -n 0.
+          XDIST_ARGS="-n 4"
+          if [ -z "${TEST_MARKER}" ]; then
+            XDIST_ARGS="-n 0"
           fi
 
           mkdir -p "$RUNNER_TEMP/test-output"
@@ -693,7 +711,8 @@ jobs:
             -e OSAC_BMH_NAMESPACE="${OSAC_BMH_NAMESPACE}" \
             -e OSAC_PULL_SECRET_PATH=/root/pull-secret \
             "${E2E_IMAGE}" \
-            pytest ${TEST_ARGS} ${FILTER_ARGS} \
+            pytest "${TEST_ARGS[@]}" "${FILTER_ARGS[@]}" "${MARKER_ARGS[@]}" \
+              ${XDIST_ARGS} \
               --junitxml=/tmp/test-output/junit.xml -v
 
       - name: Gather artifacts

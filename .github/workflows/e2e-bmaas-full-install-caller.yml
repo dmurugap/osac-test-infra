@@ -22,6 +22,10 @@ on:
         description: "pytest -k filter"
         required: false
         default: ""
+      test-marker:
+        description: "pytest -m marker (sanity, regression, or empty for all)"
+        required: false
+        default: ""
       installer-ref:
         description: "Branch/ref of the OSAC monorepo"
         required: false
@@ -53,6 +57,15 @@ jobs:
     with:
       test-suite: ${{ inputs.test-suite || 'bmaas' }}
       test-filter: ${{ inputs.test-filter || '' }}
+      # PR: sanity (lifecycle only). Schedule: regression (inventory exhaust).
+      # workflow_dispatch: honor input, or empty for full suite.
+      test-marker: >-
+        ${{
+          inputs.test-marker != '' && inputs.test-marker ||
+          (github.event_name == 'pull_request' || github.event_name == 'merge_group') && 'sanity' ||
+          github.event_name == 'schedule' && 'regression' ||
+          ''
+        }}
       installer-ref: ${{ inputs.installer-ref || 'main' }}
       installer-repo: ${{ inputs.installer-repo || 'osac-project/osac' }}
       image-overrides: ${{ inputs.image-overrides || '{}' }}

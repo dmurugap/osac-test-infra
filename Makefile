@@ -25,9 +25,11 @@ test-storage:
 	mkdir -p $(REPORTS_DIR)
 	pytest tests/storage/ -v $(if $(TEST),-k "$(TEST)") --junitxml=$(REPORTS_DIR)/storage.xml
 
+# Optional: MARKER=sanity or MARKER=regression (pytest -m)
+# -n 0 for local full-suite runs so BMH-consuming tests do not race.
 test-bmaas:
 	mkdir -p $(REPORTS_DIR)
-	pytest tests/bmaas/ -v $(if $(TEST),-k "$(TEST)") --junitxml=$(REPORTS_DIR)/bmaas.xml
+	pytest tests/bmaas/ -n 0 -v $(if $(MARKER),-m "$(MARKER)") $(if $(TEST),-k "$(TEST)") --junitxml=$(REPORTS_DIR)/bmaas.xml
 
 test-metering:
 	mkdir -p $(REPORTS_DIR)
