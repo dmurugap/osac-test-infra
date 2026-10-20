@@ -29,7 +29,7 @@ run after a failed stage.
 
 | Former failure | Where it is handled |
 | --- | --- |
-| `cluster-tool` downloaded from `openshift-assisted/cluster-tool` releases, which does not publish that binary | `scripts/setup-infra.sh` clones `osac-project/cluster-tool` and installs it on `PATH`, including `/usr/bin` so `sudo` can find it |
+| `cluster-tool` downloaded from `openshift-assisted/cluster-tool` releases, which does not publish that binary | `scripts/setup-infra.sh` checks out a pinned commit of `osac-project/cluster-tool` and installs it on `PATH`, including `/usr/bin` so `sudo` can find it |
 | Private flavor image pull had no registry credentials | `scripts/setup-infra.sh` stages the pull secret, when present, for Docker and Podman before `cluster-tool pull`. Copying a flavor cache from another machine is not the default |
 | `oc`, Helm, or the `osac` CLI missing on a fresh runner | `scripts/setup-infra.sh` runs `scripts/machine-init.sh oc helm osac` |
 | `values/caas-ci/values.yaml` no longer exists | `scripts/deploy-osac.sh` runs `make install-infra` and `make install-osac` with `PLATFORM=openshift`, `PROFILE=caas-ci`, and `NS` |

@@ -8,7 +8,8 @@ set -euo pipefail
 MGMT_IMAGE="${MGMT_IMAGE:-quay.io/osac-project/cluster-flavors:sno-4-22}"
 FLAVOR_NAME="sno-4-22"
 CLUSTER_TOOL_REPO="${CLUSTER_TOOL_REPO:-https://github.com/osac-project/cluster-tool.git}"
-CLUSTER_TOOL_REF="${CLUSTER_TOOL_REF:-main}"
+# Full commit of osac-project/cluster-tool. Bump deliberately; do not track main.
+CLUSTER_TOOL_REF="${CLUSTER_TOOL_REF:-f9c5469a3b46380f2690854907b42dd61a29f697}"
 CLUSTER_TOOL_DIR="${CLUSTER_TOOL_DIR:-/opt/cluster-tool}"
 CLUSTER_TOOL_BIN="${CLUSTER_TOOL_BIN:-/usr/local/bin/cluster-tool}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -35,8 +36,12 @@ install_client_tools() {
 }
 
 install_cluster_tool() {
-    if [[ -x "${CLUSTER_TOOL_BIN}" ]]; then
-        info "cluster-tool already installed at ${CLUSTER_TOOL_BIN}"
+    local current=""
+    if [[ -d "${CLUSTER_TOOL_DIR}/.git" ]]; then
+        current="$(git -C "${CLUSTER_TOOL_DIR}" rev-parse HEAD 2>/dev/null || true)"
+    fi
+    if [[ -x "${CLUSTER_TOOL_BIN}" && "${current}" == "${CLUSTER_TOOL_REF}" ]]; then
+        info "cluster-tool already installed at ${CLUSTER_TOOL_REF}"
     else
         info "Installing cluster-tool from ${CLUSTER_TOOL_REPO}@${CLUSTER_TOOL_REF}"
         if ! command -v git >/dev/null 2>&1; then
@@ -47,8 +52,15 @@ install_cluster_tool() {
         fi
         if [[ ! -d "${CLUSTER_TOOL_DIR}/.git" ]]; then
             rm -rf "${CLUSTER_TOOL_DIR}"
-            git clone --branch "${CLUSTER_TOOL_REF}" --depth 1 "${CLUSTER_TOOL_REPO}" "${CLUSTER_TOOL_DIR}"
+            git init -q "${CLUSTER_TOOL_DIR}"
+            git -C "${CLUSTER_TOOL_DIR}" remote add origin "${CLUSTER_TOOL_REPO}"
+        elif ! git -C "${CLUSTER_TOOL_DIR}" remote get-url origin >/dev/null 2>&1; then
+            git -C "${CLUSTER_TOOL_DIR}" remote add origin "${CLUSTER_TOOL_REPO}"
+        else
+            git -C "${CLUSTER_TOOL_DIR}" remote set-url origin "${CLUSTER_TOOL_REPO}"
         fi
+        git -C "${CLUSTER_TOOL_DIR}" fetch --depth 1 origin "${CLUSTER_TOOL_REF}"
+        git -C "${CLUSTER_TOOL_DIR}" checkout -q --force --detach FETCH_HEAD
         install -m 0755 "${CLUSTER_TOOL_DIR}/cluster-tool" "${CLUSTER_TOOL_BIN}"
     fi
     # sudo secure_path does not include /usr/local/bin.

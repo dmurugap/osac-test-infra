@@ -79,6 +79,18 @@ else
     ok "setup-infra.sh does not use the openshift-assisted cluster-tool URL"
 fi
 
+if grep -q 'CLUSTER_TOOL_REF="${CLUSTER_TOOL_REF:-[0-9a-f]\{40\}}"$' "${INFRA_DIR}/scripts/setup-infra.sh"; then
+    ok "cluster-tool is pinned to a full commit"
+else
+    bad "cluster-tool default ref is not a full commit SHA"
+fi
+
+if grep -q 'git clone --branch' "${INFRA_DIR}/scripts/setup-infra.sh"; then
+    bad "setup-infra.sh still clones cluster-tool with git clone --branch"
+else
+    ok "setup-infra.sh fetches the pinned cluster-tool commit"
+fi
+
 if grep -q 'host_type_disposition' "${INFRA_DIR}/scripts/setup-caas.sh"; then
     ok "setup-caas.sh classifies host-type HTTP status"
 else
