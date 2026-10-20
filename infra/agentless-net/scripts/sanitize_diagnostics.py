@@ -44,8 +44,19 @@ _PEM = re.compile(
     rb"-----BEGIN [A-Z0-9 ]+-----.*?-----END [A-Z0-9 ]+-----",
     re.DOTALL,
 )
+# The key must be the whole token. That keeps "token:" inside a journal
+# sentence, and substrings such as oauth or x-auth, out of the credential rule.
+_SECRET_KEYS = (
+    rb"certificate-authority-data|client-certificate-data|client-key-data|"
+    rb"token|password|client-secret|auth|\.dockerconfigjson"
+)
 _KUBE_SECRET = re.compile(
-    rb"(?im)^([ \t-]*\"?(?:certificate-authority-data|client-certificate-data|client-key-data|token|password|client-secret|auth|\.dockerconfigjson)\"?:)[ \t]+(?!\")(\S+)"
+    rb"(?im)^([ \t-]*\"?(?<![A-Za-z0-9_-])(?:"
+    + _SECRET_KEYS
+    + rb")\"?:)[ \t]+(?!\")(\S+)"
+)
+_YAML_QUOTED_SECRET = re.compile(
+    rb"(?im)^([ \t-]*(?<![A-Za-z0-9_-])(?:" + _SECRET_KEYS + rb"):)[ \t]+\"[^\"]*\""
 )
 _JSON_SECRET = re.compile(
     rb'(?i)("[A-Za-z0-9_.-]*(?:token|password|secret|auth|key-data|dockerconfigjson)[A-Za-z0-9_.-]*"\s*:\s*)"[^"]*"'
@@ -85,6 +96,7 @@ _REPLACEMENTS = (
     (_URL_CREDENTIAL, lambda m: m.group(1) + REDACTED.encode() + b"@"),
     (_EMAIL, REDACTED.encode()),
     (_JSON_SECRET, lambda m: m.group(1) + b'"' + REDACTED.encode() + b'"'),
+    (_YAML_QUOTED_SECRET, lambda m: m.group(1) + b' "' + REDACTED.encode() + b'"'),
     (_KUBE_SECRET, lambda m: m.group(1) + b" " + REDACTED.encode()),
     (_BEARER, b"Bearer " + REDACTED.encode()),
     (_BASIC, b"Basic " + REDACTED.encode()),
@@ -116,7 +128,12 @@ _FORBIDDEN = (
     (
         "kubeconfig",
         re.compile(
-            rb"(?im)(?:certificate-authority-data|client-certificate-data|client-key-data|token|password|client-secret|auth|\.dockerconfigjson):[ \t]*(?!\[REDACTED\])\S"
+            rb"(?im)(?:^[ \t-]*\"?(?<![A-Za-z0-9_-])(?:"
+            + _SECRET_KEYS
+            + rb")\"?:[ \t]+(?!\")(?!\[REDACTED\])\S"
+            + rb"|^[ \t-]*(?<![A-Za-z0-9_-])(?:"
+            + _SECRET_KEYS
+            + rb"):[ \t]+\"(?!\[REDACTED\]))"
         ),
     ),
     (
@@ -136,7 +153,7 @@ _FORBIDDEN = (
     (
         "assignment",
         re.compile(
-            rb"(?i)[A-Za-z0-9_]*(?:password|token|secret|session)[A-Za-z0-9_]*=(?!\[REDACTED\])\S"
+            rb"(?i)[A-Za-z0-9_]*(?:password|token|secret|session)[A-Za-z0-9_]*=(?!\[REDACTED\])[^\s&]"
         ),
     ),
     ("url-credential", re.compile(rb"(?i)://[^/\s:@]+:[^@\s/]+@")),
@@ -184,18 +201,42 @@ def _path_failures(relative: Path) -> list[str]:
     return failures
 
 
-def redact_file(data: bytes, filename: str) -> bytes:
-    match = _ORDER_FILE.fullmatch(filename)
-    if match:
-        order = match.group("order").encode()
-        if len(order) >= 3:
-            data = data.replace(order, REDACTED.encode())
+def redact_file(data: bytes, orders: list[bytes]) -> bytes:
+    for order in orders:
+        data = data.replace(order, REDACTED.encode())
     return redact_bytes(data)
 
 
+def _order_names(names: list[str]) -> list[bytes]:
+    return sorted(
+        {
+            match.group("order").encode()
+            for name in names
+            if (match := _ORDER_FILE.fullmatch(name)) and len(match.group("order")) >= 3
+        },
+        key=len,
+        reverse=True,
+    )
+
+
 def sanitize_tree(root: Path) -> None:
+    root = root.resolve()
     failures: list[str] = []
-    files = sorted(p for p in root.rglob("*") if p.is_file())
+    entries = list(root.rglob("*"))
+    for path in entries:
+        if path.is_symlink():
+            failures.append(f"{path}: symlink")
+            continue
+        try:
+            resolved = path.resolve()
+        except OSError:
+            failures.append(f"{path}: unreadable")
+            continue
+        if not resolved.is_relative_to(root):
+            failures.append(f"{path}: path escapes staging directory")
+    if failures:
+        _refuse(failures)
+    files = sorted(path for path in entries if path.is_file())
     planned: list[tuple[Path, Path]] = []
     used: set[Path] = set()
     for path in files:
@@ -219,7 +260,8 @@ def sanitize_tree(root: Path) -> None:
             path.rename(dest)
         published.append((dest, original_name))
 
-    for path, original_name in published:
+    orders = _order_names([original_name for _, original_name in published])
+    for path, _original_name in published:
         relative = path.relative_to(root)
         path_failures = _path_failures(relative)
         if path_failures:
@@ -229,11 +271,10 @@ def sanitize_tree(root: Path) -> None:
         if b"\x00" in raw:
             failures.append(f"{path}: binary file")
             continue
-        cleaned = redact_file(raw, original_name)
+        cleaned = redact_file(raw, orders)
         path.write_bytes(cleaned)
         reasons = forbidden_reasons(cleaned)
-        order = _ORDER_FILE.fullmatch(original_name)
-        if order and len(order.group("order")) >= 3 and order.group("order").encode() in cleaned:
+        if any(order in cleaned for order in orders):
             reasons.append("cluster-order")
         if reasons:
             failures.append(f"{path}: {', '.join(reasons)}")

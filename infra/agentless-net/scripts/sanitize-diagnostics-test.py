@@ -147,8 +147,10 @@ def test_cluster_order_names_are_not_uploaded() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = pathlib.Path(tmp)
         target = root / "agentless-net/customer-cluster-nodes.txt"
+        other = root / "agentless-net/hostedclusters.txt"
         target.parent.mkdir(parents=True)
         target.write_text("customer-cluster Ready 10.0.0.8\n")
+        other.write_text("customer-cluster api.cluster.example.com\n")
         gate.sanitize_tree(root)
         names = [path.relative_to(root).as_posix() for path in root.rglob("*") if path.is_file()]
         published = b"".join(path.read_bytes() for path in root.rglob("*") if path.is_file())
@@ -157,6 +159,44 @@ def test_cluster_order_names_are_not_uploaded() -> None:
             _assert("customer-cluster" not in name, f"cluster order remains in {name}")
         _assert(b"customer-cluster" not in published, "cluster order remains in the log")
         _assert(b"10.0.0.8" not in published, "node address remains in the log")
+
+
+def test_journal_prose_is_not_a_credential() -> None:
+    prose = b"failed to get token: connection refused\n"
+    neighbors = b"oauth: public\nx-auth: public\npassword=&\n"
+    _assert(not gate.forbidden_reasons(prose), f"journal prose looks secret: {gate.forbidden_reasons(prose)}")
+    _assert(not gate.forbidden_reasons(neighbors), f"non-secrets look secret: {gate.forbidden_reasons(neighbors)}")
+    _assert(gate.redact_bytes(prose) == prose, "journal prose was redacted")
+    quoted = b'password: "x"\n'
+    _assert(gate.forbidden_reasons(quoted), "quoted yaml password would pass")
+    cleaned = gate.redact_bytes(quoted)
+    _assert(b'"x"' not in cleaned, f"quoted password remains: {cleaned!r}")
+    _assert(not gate.forbidden_reasons(cleaned), f"quoted password still forbidden: {cleaned!r}")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = pathlib.Path(tmp)
+        target = root / "host/journalctl.log"
+        target.parent.mkdir(parents=True)
+        target.write_bytes(prose)
+        gate.sanitize_tree(root)
+        _assert(target.read_bytes() == prose, "journal prose was dropped")
+
+
+def test_symlinks_are_refused() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = pathlib.Path(tmp) / "stage"
+        outside = pathlib.Path(tmp) / "outside.txt"
+        root.mkdir()
+        (root / "host").mkdir()
+        outside.write_text("do-not-touch\n")
+        (root / "host/dmesg.log").symlink_to(outside)
+        (root / "host/cloud-init.log").symlink_to(root / "missing")
+        try:
+            gate.sanitize_tree(root)
+        except SystemExit as exc:
+            _assert(exc.code == 1, f"symlink exited {exc.code}")
+            _assert(outside.read_text() == "do-not-touch\n", "symlink target was overwritten")
+            return
+        raise AssertionError("symlink would be uploaded")
 
 
 def test_binary_diagnostics_are_refused() -> None:
@@ -194,6 +234,8 @@ def main() -> None:
     test_verification_rejects_remaining_findings()
     test_auth_schemes_stay_intact()
     test_cluster_order_names_are_not_uploaded()
+    test_journal_prose_is_not_a_credential()
+    test_symlinks_are_refused()
     test_binary_diagnostics_are_refused()
     test_clean_redacted_file_is_publishable()
     print("sanitize-diagnostics: ok")
