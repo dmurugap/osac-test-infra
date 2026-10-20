@@ -369,53 +369,46 @@ jobs:
         shell: bash
         run: make -C infra/agentless-net gather-e2e
 
-      - name: Select kubeconfig for artifact collection
-        id: artifact-kubeconfig
+      - name: Collect host diagnostics
+        if: always()
+        continue-on-error: true
+        timeout-minutes: 10
+        shell: bash
+        run: bash scripts/ec2-runner/gather-host-logs.sh "${RUNNER_TEMP}/agentless-host-raw"
+
+      - name: Sanitize diagnostics
+        id: sanitize-diagnostics
         if: always()
         shell: bash
         run: |
           set -euo pipefail
-          artifact_kubeconfig="${RUNNER_TEMP}/agentless-artifact-kubeconfig"
-          source_kubeconfig=""
-          if [[ -f infra/agentless-net/.env.infra ]]; then
-            # shellcheck disable=SC1091
-            source infra/agentless-net/.env.infra
-            source_kubeconfig="${KUBECONFIG:-}"
+          stage="${RUNNER_TEMP}/agentless-sanitized-logs"
+          rm -rf "${stage}"
+          mkdir -p "${stage}"
+          if [[ -d infra/agentless-net/logs ]]; then
+            mkdir -p "${stage}/agentless-net"
+            cp -a infra/agentless-net/logs/. "${stage}/agentless-net/"
+            rm -rf infra/agentless-net/logs
           fi
-          if [[ ! -s "${source_kubeconfig}" && -s /root/.kube/agentless-lab-mgmt.kubeconfig ]]; then
-            source_kubeconfig="/root/.kube/agentless-lab-mgmt.kubeconfig"
+          if [[ -d "${RUNNER_TEMP}/agentless-host-raw" ]]; then
+            mkdir -p "${stage}/host"
+            cp -a "${RUNNER_TEMP}/agentless-host-raw/." "${stage}/host/"
+            rm -rf "${RUNNER_TEMP}/agentless-host-raw"
           fi
-          if [[ -n "${source_kubeconfig}" && -s "${source_kubeconfig}" ]] && install -m 600 "${source_kubeconfig}" "${artifact_kubeconfig}"; then
-            echo "path=${artifact_kubeconfig}" >> "${GITHUB_OUTPUT}"
-          else
-            umask 077
-            placeholder="${RUNNER_TEMP}/agentless-empty-kubeconfig"
-            : > "${placeholder}"
-            echo "path=${placeholder}" >> "${GITHUB_OUTPUT}"
+          if ! python3 -I infra/agentless-net/scripts/sanitize_diagnostics.py "${stage}"; then
+            rm -rf "${stage}"
+            exit 1
           fi
+          echo "path=${stage}" >> "${GITHUB_OUTPUT}"
 
-      - name: Gather and redact cluster artifacts
-        if: always()
-        uses: ./.github/actions/gather-artifacts
-        with:
-          namespace: osac-e2e-ci
-          kubeconfig-path: ${{ steps.artifact-kubeconfig.outputs.path }}
-          artifact-name: caas-agentlessnet-artifacts
-
-      - name: Upload AgentlessNet diagnostics
-        if: always()
+      - name: Upload sanitized diagnostics
+        if: steps.sanitize-diagnostics.outcome == 'success'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: caas-agentlessnet-logs
-          path: infra/agentless-net/logs/
+          path: ${{ steps.sanitize-diagnostics.outputs.path }}
           retention-days: 7
           if-no-files-found: warn
-
-      - name: Gather EC2 runner artifacts
-        if: always()
-        uses: ./.github/actions/gather-ec2-runner-artifacts
-        with:
-          artifact-name: caas-agentlessnet-ec2-runner-logs
 
   teardown:
     needs: [provision, push-secrets, e2e]

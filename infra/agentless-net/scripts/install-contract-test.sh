@@ -103,6 +103,25 @@ else
     bad "cluster-tool install does not compare the binary with the pinned checkout"
 fi
 
+workflow="${INFRA_DIR}/../../.github/workflows/e2e-caas-agentlessnet-full-install.yml"
+if grep -q 'path: infra/agentless-net/logs/' "${workflow}" || grep -q 'gather-ec2-runner-artifacts' "${workflow}" || grep -q 'gather-artifacts' "${workflow}"; then
+    bad "workflow uploads raw AgentlessNet or host diagnostics"
+else
+    ok "workflow does not upload raw AgentlessNet or host diagnostics"
+fi
+
+if grep -q 'sanitize_diagnostics.py' "${workflow}"; then
+    ok "workflow sanitizes diagnostics before upload"
+else
+    bad "workflow does not sanitize diagnostics before upload"
+fi
+
+if grep -q "steps.sanitize-diagnostics.outcome == 'success'" "${workflow}"; then
+    ok "workflow uploads diagnostics only after the sanitizer succeeds"
+else
+    bad "workflow can upload diagnostics when the sanitizer fails"
+fi
+
 if grep -q 'host_type_disposition' "${INFRA_DIR}/scripts/setup-caas.sh"; then
     ok "setup-caas.sh classifies host-type HTTP status"
 else
