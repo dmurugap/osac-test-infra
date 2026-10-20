@@ -122,6 +122,12 @@ else
     bad "workflow can upload diagnostics when the sanitizer fails"
 fi
 
+if grep -A2 'sanitize_diagnostics.py' "${workflow}" | grep -q 'rm -rf "${stage}"'; then
+    ok "workflow deletes the staging directory when sanitizing fails"
+else
+    bad "workflow keeps the staging directory when sanitizing fails"
+fi
+
 if grep -q 'host_type_disposition' "${INFRA_DIR}/scripts/setup-caas.sh"; then
     ok "setup-caas.sh classifies host-type HTTP status"
 else
