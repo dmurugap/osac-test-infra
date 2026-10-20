@@ -92,19 +92,19 @@ ensure_hypervisor_api_dns() {
         desired_ip=$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i = 1; i <= NF; i++) if ($i == "src") { print $(i + 1); exit }}')
     fi
     if [[ ! "${desired_ip}" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
-        echo "ERROR: could not determine an IPv4 address for ${api_name}" >&2
+        echo "ERROR: could not determine the hypervisor IPv4 address for the API name" >&2
         exit 1
     fi
     current=$(getent hosts "${api_name}" | awk '$1 ~ /^[0-9.]+$/ { print $1; exit }' || true)
     if [[ "${current}" == "${desired_ip}" ]]; then
-        info "API name ${api_name} already resolves to the hypervisor"
+        info "API name already resolves to the hypervisor"
         return 0
     fi
     if ! command -v systemctl >/dev/null 2>&1 || ! systemctl is-active NetworkManager >/dev/null 2>&1; then
-        echo "ERROR: ${api_name} resolves to '${current:-nothing}', expected ${desired_ip}, and NetworkManager is not active" >&2
+        echo "ERROR: API name does not resolve to the hypervisor, and NetworkManager is not active" >&2
         exit 1
     fi
-    info "Pointing ${CLUSTER_DOMAIN} at the hypervisor via NetworkManager dnsmasq"
+    info "Pointing the cluster domain at the hypervisor via NetworkManager dnsmasq"
     mkdir -p /etc/NetworkManager/conf.d /etc/NetworkManager/dnsmasq.d
     printf '%s\n' '[main]' 'dns=dnsmasq' > /etc/NetworkManager/conf.d/cluster-tool-dns.conf
     printf 'address=/%s/%s\n' "${CLUSTER_DOMAIN}" "${desired_ip}" > "/etc/NetworkManager/dnsmasq.d/cluster-${MGMT_CLONE_NAME}.conf"
@@ -115,7 +115,7 @@ ensure_hypervisor_api_dns() {
         [[ "${current}" == "${desired_ip}" ]] && return 0
         sleep 2
     done
-    echo "ERROR: ${api_name} resolved to '${current:-nothing}' after NetworkManager restart; expected ${desired_ip}" >&2
+    echo "ERROR: API name still does not resolve to the hypervisor after NetworkManager restart" >&2
     exit 1
 }
 

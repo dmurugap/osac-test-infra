@@ -97,11 +97,13 @@ jobs:
       contents: read
       pull-requests: read
     steps:
+      # Authorization reads Vault and must run the workflow revision, not the
+      # pull request checkout. A fork can otherwise replace the action.
       - name: Checkout repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
-          repository: ${{ inputs.test-infra-repository || job.workflow_repository }}
-          ref: ${{ inputs.test-infra-sha || inputs.test-infra-ref || ((inputs.test-infra-repository == '' || inputs.test-infra-repository == job.workflow_repository) && job.workflow_sha || '') }}
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
           persist-credentials: false
 
       - name: Validate and bootstrap
@@ -190,11 +192,13 @@ jobs:
     env:
       KNOWN_HOSTS_FILE: /tmp/osac-ec2-known-hosts-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
+      # This job passes Vault and Route 53 values to a shell script. Use the
+      # workflow revision so a pull request cannot replace that script.
       - name: Checkout repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
-          repository: ${{ inputs.test-infra-repository || job.workflow_repository }}
-          ref: ${{ inputs.test-infra-sha || inputs.test-infra-ref || ((inputs.test-infra-repository == '' || inputs.test-infra-repository == job.workflow_repository) && job.workflow_sha || '') }}
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
           persist-credentials: false
 
       - name: Validate and bootstrap
