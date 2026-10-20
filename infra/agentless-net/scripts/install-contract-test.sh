@@ -91,6 +91,12 @@ else
     ok "setup-infra.sh fetches the pinned cluster-tool commit"
 fi
 
+if grep -q 'status --porcelain -- cluster-tool' "${INFRA_DIR}/scripts/setup-infra.sh"; then
+    ok "cluster-tool install restores a dirty pinned checkout"
+else
+    bad "cluster-tool install ignores local edits in the pinned checkout"
+fi
+
 if grep -q 'cmp -s "${CLUSTER_TOOL_DIR}/cluster-tool" "${CLUSTER_TOOL_BIN}"' "${INFRA_DIR}/scripts/setup-infra.sh"; then
     ok "cluster-tool install compares the binary with the pinned checkout"
 else

@@ -37,10 +37,14 @@ install_client_tools() {
 
 install_cluster_tool() {
     local current=""
+    local dirty=0
     if [[ -d "${CLUSTER_TOOL_DIR}/.git" ]]; then
         current="$(git -C "${CLUSTER_TOOL_DIR}" rev-parse HEAD 2>/dev/null || true)"
+        if [[ -n "$(git -C "${CLUSTER_TOOL_DIR}" status --porcelain -- cluster-tool 2>/dev/null || true)" ]]; then
+            dirty=1
+        fi
     fi
-    if [[ "${current}" != "${CLUSTER_TOOL_REF}" || ! -f "${CLUSTER_TOOL_DIR}/cluster-tool" ]]; then
+    if [[ "${current}" != "${CLUSTER_TOOL_REF}" || ! -f "${CLUSTER_TOOL_DIR}/cluster-tool" || "${dirty}" -eq 1 ]]; then
         info "Installing cluster-tool from ${CLUSTER_TOOL_REPO}@${CLUSTER_TOOL_REF}"
         if ! command -v git >/dev/null 2>&1; then
             dnf install -y git
@@ -48,17 +52,21 @@ install_cluster_tool() {
         if ! command -v python3 >/dev/null 2>&1; then
             dnf install -y python3
         fi
-        if [[ ! -d "${CLUSTER_TOOL_DIR}/.git" ]]; then
-            rm -rf "${CLUSTER_TOOL_DIR}"
-            git init -q "${CLUSTER_TOOL_DIR}"
-            git -C "${CLUSTER_TOOL_DIR}" remote add origin "${CLUSTER_TOOL_REPO}"
-        elif ! git -C "${CLUSTER_TOOL_DIR}" remote get-url origin >/dev/null 2>&1; then
-            git -C "${CLUSTER_TOOL_DIR}" remote add origin "${CLUSTER_TOOL_REPO}"
+        if [[ "${current}" == "${CLUSTER_TOOL_REF}" && -d "${CLUSTER_TOOL_DIR}/.git" ]]; then
+            git -C "${CLUSTER_TOOL_DIR}" checkout -q --force --detach "${CLUSTER_TOOL_REF}"
         else
-            git -C "${CLUSTER_TOOL_DIR}" remote set-url origin "${CLUSTER_TOOL_REPO}"
+            if [[ ! -d "${CLUSTER_TOOL_DIR}/.git" ]]; then
+                rm -rf "${CLUSTER_TOOL_DIR}"
+                git init -q "${CLUSTER_TOOL_DIR}"
+                git -C "${CLUSTER_TOOL_DIR}" remote add origin "${CLUSTER_TOOL_REPO}"
+            elif ! git -C "${CLUSTER_TOOL_DIR}" remote get-url origin >/dev/null 2>&1; then
+                git -C "${CLUSTER_TOOL_DIR}" remote add origin "${CLUSTER_TOOL_REPO}"
+            else
+                git -C "${CLUSTER_TOOL_DIR}" remote set-url origin "${CLUSTER_TOOL_REPO}"
+            fi
+            git -C "${CLUSTER_TOOL_DIR}" fetch --depth 1 origin "${CLUSTER_TOOL_REF}"
+            git -C "${CLUSTER_TOOL_DIR}" checkout -q --force --detach FETCH_HEAD
         fi
-        git -C "${CLUSTER_TOOL_DIR}" fetch --depth 1 origin "${CLUSTER_TOOL_REF}"
-        git -C "${CLUSTER_TOOL_DIR}" checkout -q --force --detach FETCH_HEAD
     fi
     # The checkout can already be on the pin while CLUSTER_TOOL_BIN is an older copy.
     if [[ ! -f "${CLUSTER_TOOL_BIN}" ]] || ! cmp -s "${CLUSTER_TOOL_DIR}/cluster-tool" "${CLUSTER_TOOL_BIN}"; then
