@@ -55,9 +55,11 @@ The `fabricManager: agentless_net` installer stub is a separate VirtualNetwork b
 
 ## Checks without a cluster
 
+From this directory:
+
 ```text
-bash infra/agentless-net/scripts/setup-caas-test.sh
-bash infra/agentless-net/scripts/install-contract-test.sh
+bash scripts/setup-caas-test.sh
+bash scripts/install-contract-test.sh
 ```
 
 Do not run `setup-infra`, `deploy-ocp`, `deploy-osac`, or `deploy-fabric` against a cluster that is already in use.
