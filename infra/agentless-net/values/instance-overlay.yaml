@@ -1,0 +1,33 @@
+# Schema-valid instance overrides for `make install-osac` on profile caas-ci.
+# caas-ci selects CUDN and ci.steps. This lab uses k8s_only, which the chart
+# derives as agentless_net / agentless_net.steps when expert AAP overrides
+# are off. Keys the Helm schema rejects live in fulfillment-ig.env and are
+# patched onto the ConfigMap after install.
+global:
+  expertOverrides:
+    aap: false
+  networking:
+    fabricManager: ""
+    k8sManager: k8s_only
+operator:
+  networkManagers:
+    fabricManagers:
+      cudn_net:
+        enabled: false
+    k8sManagers:
+      k8s_only:
+        enabled: true
+metering:
+  enabled: false
+aap:
+  instanceGroups:
+    clusterFulfillment:
+      config:
+        NETWORK_CLASS: agentless_net
+        NETWORK_STEPS_COLLECTION: agentless_net.steps
+        SERVER_MGMT_ROUTE_DESTINATION: 192.168.162.0/24
+        SERVER_MGMT_ROUTE_GATEWAY: 192.168.162.1
+        # Shared CI Route 53 zone for hosted clusters. Not a lab address.
+        HOSTED_CLUSTER_BASE_DOMAIN: ecoeng-osac-ci.devcluster.openshift.com
+        EXTERNAL_ACCESS_BASE_DOMAIN: ecoeng-osac-ci.devcluster.openshift.com
+        EXTERNAL_ACCESS_SUPPORTED_BASE_DOMAINS: ecoeng-osac-ci.devcluster.openshift.com

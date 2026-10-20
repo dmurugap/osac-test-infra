@@ -1,0 +1,6 @@
+# Infra overrides for the agentless-net full install.
+# Passed to `make install-infra` as INFRA_VALUES_EXTRA.
+# Kafka stays off unless AGENTLESS_NET_KAFKA=true: this suite does not use it,
+# and the SNO snapshot does not already contain Strimzi.
+kafka:
+  enabled: false

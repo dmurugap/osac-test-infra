@@ -77,17 +77,20 @@ HTTP_CODE=$(curl -sk -w "%{http_code}" -X POST "${INTERNAL_API}/api/private/v1/h
     -H "Content-Type: application/json" \
     -d "{\"id\": \"${AGENT_RESOURCE_CLASS}\", \"title\": \"CI Worker\", \"description\": \"Worker nodes for CI testing\"}" \
     -o "${RESPONSE_BODY}") || true
-if [[ "${HTTP_CODE}" == "200" || "${HTTP_CODE}" == "201" ]]; then
-    info "Host type '${AGENT_RESOURCE_CLASS}' created"
-elif [[ "${HTTP_CODE}" == "409" ]]; then
-    info "Host type '${AGENT_RESOURCE_CLASS}' already exists — skipping"
-else
+if ! disposition=$(host_type_disposition "${HTTP_CODE}"); then
     echo "ERROR: Failed to create host type (HTTP ${HTTP_CODE})"
     cat "${RESPONSE_BODY}"
     rm -f "${RESPONSE_BODY}"
     exit 1
 fi
 rm -f "${RESPONSE_BODY}"
+case "${disposition}" in
+    created) info "Host type '${AGENT_RESOURCE_CLASS}' created" ;;
+    exists) info "Host type '${AGENT_RESOURCE_CLASS}' already exists — skipping" ;;
+    removed)
+        info "Host type API returned HTTP 404 and is not part of current OSAC. Continuing; agents are still labeled osac.openshift.io/resource_class=${AGENT_RESOURCE_CLASS}."
+        ;;
+esac
 
 # In cluster-namespace mode without a namespace, host-type registration
 # is all we can do before the ClusterOrder exists.  Exit cleanly so the

@@ -36,3 +36,15 @@ validate_agent_flow() {
         *) return 1 ;;
     esac
 }
+
+# Classify POST /api/private/v1/host_types.
+# Current OSAC removed the HostType resource, so 404 is not a failed create.
+# Prints created, exists, or removed. Returns 1 for any other status.
+host_type_disposition() {
+    case "${1:-}" in
+        200|201) printf '%s\n' created ;;
+        409) printf '%s\n' exists ;;
+        404) printf '%s\n' removed ;;
+        *) return 1 ;;
+    esac
+}

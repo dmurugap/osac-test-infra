@@ -69,6 +69,14 @@ assert_rc "cluster-namespace skips approval" 1 should_approve_agents
 unset CAAS_AGENT_FLOW 2>/dev/null || true
 assert_rc "default (hot-pool) approves agents" 0 should_approve_agents
 
+# ── host_type_disposition ─────────────────────────────────────────
+assert_eq "host type 201 is created" "created" "$(host_type_disposition 201)"
+assert_eq "host type 200 is created" "created" "$(host_type_disposition 200)"
+assert_eq "host type 409 already exists" "exists" "$(host_type_disposition 409)"
+assert_eq "host type 404 is removed" "removed" "$(host_type_disposition 404)"
+assert_rc "host type 500 is an error" 1 host_type_disposition 500
+assert_rc "host type empty status is an error" 1 host_type_disposition ""
+
 # ── Structural: setup-caas.sh does not log VM names ───────────────
 # VM creation/start messages must use index-only labels.
 # Detect both $vm and ${vm} — either form leaks the configured hostname.

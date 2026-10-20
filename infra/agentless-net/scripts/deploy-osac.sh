@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 #
-# Refresh OSAC on the snapshot cluster with agentless-net values.
-# Clones the osac mono-repo, merges caas-ci base values with the
-# agentless-net overlay, and runs refresh-after-snapshot.py.
-# Corresponds to setup-lab.sh steps 7-10.
+# Install OSAC on the management cluster for the agentless-net lab.
+# Clones the osac mono-repo and installs profile caas-ci with the
+# schema-valid overlays in ../values. Agentless settings that Helm
+# rejects are patched onto the cluster-fulfillment-ig ConfigMap after
+# install. Corresponds to setup-lab.sh steps 7-10.
 # Idempotent — safe to re-run.
 #
 set -euo pipefail
@@ -15,13 +16,14 @@ INFRA_DIR="${SCRIPT_DIR}/.."
 source "${INFRA_DIR}/.mgmt-network"
 
 OSAC_NAMESPACE="${OSAC_NAMESPACE:-osac-e2e-ci}"
-OSAC_VALUES_FILE="${OSAC_VALUES_FILE:-values/caas-ci/values.yaml}"
+OSAC_PROFILE="${OSAC_PROFILE:-caas-ci}"
 OSAC_REPO="${OSAC_REPO:-https://github.com/osac-project/osac.git}"
 OSAC_BRANCH="${OSAC_BRANCH:-main}"
 OSAC_DIR="/opt/osac"
 INSTALLER_DIR="${OSAC_DIR}/osac-installer"
-VALUES_OVERLAY="${INFRA_DIR}/values-overlay.yaml"
-PULL_SECRET="${OSAC_PULL_SECRET_PATH:-/root/pull-secret}"
+INSTANCE_OVERLAY="${INFRA_DIR}/values/instance-overlay.yaml"
+INFRA_OVERLAY="${INFRA_DIR}/values/infra-overlay.yaml"
+FULFILLMENT_ENV="${INFRA_DIR}/values/fulfillment-ig.env"
 DNS_CREDS="${DNS_CREDENTIALS_PATH:-${INFRA_DIR}/config}"
 SSH_PRIVATE_KEY="${SSH_PRIVATE_KEY_PATH:-${HOME}/.ssh/id_rsa}"
 
@@ -41,54 +43,86 @@ else
     git clone --branch "$OSAC_BRANCH" "$OSAC_REPO" "$OSAC_DIR"
 fi
 
-# ---------- merge values overlay ----------
-
-MERGED_VALUES_DIR="${INSTALLER_DIR}/values/agentless-net-ci"
-MERGED_VALUES="${MERGED_VALUES_DIR}/values.yaml"
-mkdir -p "$MERGED_VALUES_DIR"
-
-info "Merging values overlay with ${OSAC_VALUES_FILE}..."
-python3 -c "
-import yaml, sys, copy
-
-def deep_merge(base, overlay):
-    result = copy.deepcopy(base)
-    for key, value in overlay.items():
-        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
-            result[key] = deep_merge(result[key], value)
-        else:
-            result[key] = copy.deepcopy(value)
-    return result
-
-with open(sys.argv[1]) as f:
-    base = yaml.safe_load(f)
-with open(sys.argv[2]) as f:
-    overlay = yaml.safe_load(f)
-
-merged = deep_merge(base, overlay)
-
-with open(sys.argv[3], 'w') as f:
-    yaml.dump(merged, f, default_flow_style=False, sort_keys=False)
-
-print(f'  Merged {sys.argv[1]} + {sys.argv[2]} -> {sys.argv[3]}')
-" "${INSTALLER_DIR}/${OSAC_VALUES_FILE}" "$VALUES_OVERLAY" "$MERGED_VALUES"
-
-# Copy pull-secret and license into the merged values directory
 AAP_LICENSE="${AAP_LICENSE_PATH:-/root/aap-license.zip}"
-cp "$PULL_SECRET" "${MERGED_VALUES_DIR}/pull-secret.json"
-cp "$AAP_LICENSE" "${MERGED_VALUES_DIR}/license.zip"
+
+ensure_provisioning_cr() {
+    if ! KUBECONFIG="$KUBECONFIG" oc get crd provisionings.metal3.io >/dev/null 2>&1; then
+        echo "ERROR: Metal3 Provisioning CRD is not installed." >&2
+        echo "caas-ci enables bmf.metal3, and the OSAC pre-install hook rejects a missing Provisioning CR." >&2
+        exit 1
+    fi
+    if KUBECONFIG="$KUBECONFIG" oc get provisioning provisioning-configuration >/dev/null 2>&1; then
+        info "Provisioning CR present; ensuring watchAllNamespaces"
+        KUBECONFIG="$KUBECONFIG" oc patch provisioning provisioning-configuration --type merge \
+            -p '{"spec":{"watchAllNamespaces":true,"provisioningNetwork":"Disabled"}}'
+        return 0
+    fi
+    info "Creating Provisioning CR"
+    KUBECONFIG="$KUBECONFIG" oc apply -f - <<'EOF'
+apiVersion: metal3.io/v1alpha1
+kind: Provisioning
+metadata:
+  name: provisioning-configuration
+spec:
+  provisioningNetwork: Disabled
+  watchAllNamespaces: true
+EOF
+}
+
+patch_fulfillment_configmap() {
+    local patch
+    patch=$(FULFILLMENT_ENV_FILE="${FULFILLMENT_ENV}" python3 - <<'PY'
+import json, os, pathlib, re, sys
+path = pathlib.Path(os.environ["FULFILLMENT_ENV_FILE"])
+data = {}
+key_re = re.compile(r"^[A-Z][A-Z0-9_]*$")
+val_re = re.compile(r"^[A-Za-z0-9._:/-]+$")
+for raw in path.read_text().splitlines():
+    line = raw.strip()
+    if not line or line.startswith("#"):
+        continue
+    if "=" not in line:
+        sys.exit(f"invalid fulfillment config line: {line}")
+    key, value = line.split("=", 1)
+    value = os.environ.get(key, value)
+    if not key_re.match(key) or not val_re.match(value):
+        sys.exit(f"refusing fulfillment config entry: {key}")
+    data[key] = value
+if not data:
+    sys.exit("fulfillment config is empty")
+print(json.dumps({"data": data}))
+print("config keys: " + " ".join(sorted(data)), file=sys.stderr)
+PY
+    )
+    info "Patching cluster-fulfillment-ig ConfigMap with agentless settings Helm rejects"
+    KUBECONFIG="$KUBECONFIG" oc patch configmap cluster-fulfillment-ig -n "$OSAC_NAMESPACE" --type merge -p "${patch}"
+}
 
 # ---------- step 8: install OSAC ----------
 
 if KUBECONFIG="$KUBECONFIG" oc get deploy/fulfillment-grpc-server -n "$OSAC_NAMESPACE" 2>/dev/null | grep -q "1/1"; then
     info "OSAC already running — skipping install"
 else
-    info "Installing OSAC via Helm (this may take several minutes)..."
-    (cd "$INSTALLER_DIR" && \
-        KUBECONFIG="$KUBECONFIG" \
-        make install \
-            INSTALLER_NAMESPACE="$OSAC_NAMESPACE" \
-            VALUES_FILE=values/agentless-net-ci/values.yaml)
+    info "Installing OSAC infra and instance (profile ${OSAC_PROFILE})..."
+    infra_extra=()
+    if [[ "${AGENTLESS_NET_KAFKA:-false}" != "true" ]]; then
+        infra_extra+=(INFRA_VALUES_EXTRA="-f ${INFRA_OVERLAY}")
+    fi
+    (
+        cd "${INSTALLER_DIR}"
+        KUBECONFIG="$KUBECONFIG" make install-infra \
+            PLATFORM=openshift \
+            PROFILE="${OSAC_PROFILE}" \
+            NS="${OSAC_NAMESPACE}" \
+            "${infra_extra[@]}"
+        ensure_provisioning_cr
+        KUBECONFIG="$KUBECONFIG" make install-osac \
+            PLATFORM=openshift \
+            PROFILE="${OSAC_PROFILE}" \
+            NS="${OSAC_NAMESPACE}" \
+            AAP_LICENSE_FILE="${AAP_LICENSE}" \
+            INSTANCE_VALUES_EXTRA="-f ${INSTANCE_OVERLAY}"
+    )
 fi
 
 # ---------- step 9: patch DNS credentials ----------
@@ -112,6 +146,10 @@ if [ -f "$SSH_PRIVATE_KEY" ]; then
 else
     echo "  WARN: ${SSH_PRIVATE_KEY} not found — NMState live apply will not work."
 fi
+
+# ---------- step 9c: agentless settings Helm will not accept ----------
+
+patch_fulfillment_configmap
 
 # ---------- step 10: validate OSAC ----------
 

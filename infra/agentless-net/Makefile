@@ -7,10 +7,10 @@ SCRIPTS := scripts
 
 MGMT_CLONE_NAME ?= agentless-lab-mgmt
 OSAC_NAMESPACE ?= osac-e2e-ci
-OSAC_VALUES_FILE ?= values/caas-ci/values.yaml
+OSAC_PROFILE ?= caas-ci
 OSAC_PULL_SECRET_PATH ?= /root/pull-secret
 
-export MGMT_CLONE_NAME OSAC_NAMESPACE OSAC_VALUES_FILE OSAC_PULL_SECRET_PATH
+export MGMT_CLONE_NAME OSAC_NAMESPACE OSAC_PROFILE OSAC_PULL_SECRET_PATH
 
 # ─── Contract targets ──────────────────────────────────────────────
 #
