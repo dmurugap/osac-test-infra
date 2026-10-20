@@ -91,6 +91,12 @@ else
     ok "setup-infra.sh fetches the pinned cluster-tool commit"
 fi
 
+if grep -q 'cmp -s "${CLUSTER_TOOL_DIR}/cluster-tool" "${CLUSTER_TOOL_BIN}"' "${INFRA_DIR}/scripts/setup-infra.sh"; then
+    ok "cluster-tool install compares the binary with the pinned checkout"
+else
+    bad "cluster-tool install does not compare the binary with the pinned checkout"
+fi
+
 if grep -q 'host_type_disposition' "${INFRA_DIR}/scripts/setup-caas.sh"; then
     ok "setup-caas.sh classifies host-type HTTP status"
 else

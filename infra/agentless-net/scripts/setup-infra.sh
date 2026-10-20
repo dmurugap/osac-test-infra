@@ -40,9 +40,7 @@ install_cluster_tool() {
     if [[ -d "${CLUSTER_TOOL_DIR}/.git" ]]; then
         current="$(git -C "${CLUSTER_TOOL_DIR}" rev-parse HEAD 2>/dev/null || true)"
     fi
-    if [[ -x "${CLUSTER_TOOL_BIN}" && "${current}" == "${CLUSTER_TOOL_REF}" ]]; then
-        info "cluster-tool already installed at ${CLUSTER_TOOL_REF}"
-    else
+    if [[ "${current}" != "${CLUSTER_TOOL_REF}" || ! -f "${CLUSTER_TOOL_DIR}/cluster-tool" ]]; then
         info "Installing cluster-tool from ${CLUSTER_TOOL_REPO}@${CLUSTER_TOOL_REF}"
         if ! command -v git >/dev/null 2>&1; then
             dnf install -y git
@@ -61,7 +59,12 @@ install_cluster_tool() {
         fi
         git -C "${CLUSTER_TOOL_DIR}" fetch --depth 1 origin "${CLUSTER_TOOL_REF}"
         git -C "${CLUSTER_TOOL_DIR}" checkout -q --force --detach FETCH_HEAD
+    fi
+    # The checkout can already be on the pin while CLUSTER_TOOL_BIN is an older copy.
+    if [[ ! -f "${CLUSTER_TOOL_BIN}" ]] || ! cmp -s "${CLUSTER_TOOL_DIR}/cluster-tool" "${CLUSTER_TOOL_BIN}"; then
         install -m 0755 "${CLUSTER_TOOL_DIR}/cluster-tool" "${CLUSTER_TOOL_BIN}"
+    else
+        info "cluster-tool already installed at ${CLUSTER_TOOL_REF}"
     fi
     # sudo secure_path does not include /usr/local/bin.
     if [[ "${CLUSTER_TOOL_BIN}" != /usr/bin/cluster-tool ]]; then
