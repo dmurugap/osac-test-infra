@@ -46,10 +46,6 @@ on:
         description: "AWS region to launch into"
         required: false
         default: "us-east-1"
-      tooling-check-cmds:
-        description: "Semicolon-separated commands to verify on the box before JIT registration."
-        required: false
-        default: "dnf install -y ansible-core python3-pip make; pip3 install ansible; command -v ansible-playbook; command -v make"
       osac-repo:
         description: "Override osac mono-repo git URI -- empty means upstream"
         required: false
@@ -79,7 +75,6 @@ jobs:
     with:
       instance-type: ${{ inputs.instance-type || 'c5n.metal' }}
       aws-region: ${{ inputs.aws-region || 'us-east-1' }}
-      tooling-check-cmds: ${{ inputs.tooling-check-cmds || 'dnf install -y ansible-core python3-pip make; pip3 install ansible; command -v ansible-playbook; command -v make' }}
       osac-repo: ${{ inputs.osac-repo || '' }}
       osac-branch: ${{ inputs.osac-branch || '' }}
       caas-agent-flow: ${{ inputs.caas-agent-flow || 'hot-pool' }}

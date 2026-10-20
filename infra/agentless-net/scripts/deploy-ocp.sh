@@ -95,7 +95,7 @@ ensure_hypervisor_api_dns() {
         echo "ERROR: could not determine an IPv4 address for ${api_name}" >&2
         exit 1
     fi
-    current=$(getent hosts "${api_name}" | awk '$1 ~ /^[0-9.]+$/ { print $1; exit }')
+    current=$(getent hosts "${api_name}" | awk '$1 ~ /^[0-9.]+$/ { print $1; exit }' || true)
     if [[ "${current}" == "${desired_ip}" ]]; then
         info "API name ${api_name} already resolves to the hypervisor"
         return 0
@@ -111,7 +111,7 @@ ensure_hypervisor_api_dns() {
     systemctl restart NetworkManager
     local _
     for _ in 1 2 3 4 5 6 7 8 9 10; do
-        current=$(getent hosts "${api_name}" | awk '$1 ~ /^[0-9.]+$/ { print $1; exit }')
+        current=$(getent hosts "${api_name}" | awk '$1 ~ /^[0-9.]+$/ { print $1; exit }' || true)
         [[ "${current}" == "${desired_ip}" ]] && return 0
         sleep 2
     done

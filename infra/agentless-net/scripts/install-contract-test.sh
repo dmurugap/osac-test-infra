@@ -41,7 +41,7 @@ do
     fi
 done
 
-if grep -q 'kafka:' "${infra}" && grep -q 'enabled: false' "${infra}"; then
+if awk '/^[[:space:]]*kafka:/{k=1; next} k && /^[^[:space:]#]/{k=0} k && /enabled:[[:space:]]*false/{f=1} END{exit !f}' "${infra}"; then
     ok "infra overlay disables kafka"
 else
     bad "infra overlay does not disable kafka"

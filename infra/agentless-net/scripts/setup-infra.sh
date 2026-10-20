@@ -71,13 +71,38 @@ stage_registry_auth() {
         return 0
     fi
     info "Staging registry credentials for the private flavor image"
-    mkdir -p /root/.docker /root/.config/containers
-    install -m 600 "${pull_secret}" /root/.docker/config.json
-    install -m 600 "${pull_secret}" /root/.config/containers/auth.json
+    local dest owner saved_umask status
+    local -a dests=(
+        /root/.docker/config.json
+        /root/.config/containers/auth.json
+    )
     if [[ "${HOME}" != /root ]]; then
-        mkdir -p "${HOME}/.docker" "${HOME}/.config/containers"
-        install -m 600 "${pull_secret}" "${HOME}/.docker/config.json"
-        install -m 600 "${pull_secret}" "${HOME}/.config/containers/auth.json"
+        dests+=(
+            "${HOME}/.docker/config.json"
+            "${HOME}/.config/containers/auth.json"
+        )
+    fi
+    for dest in "${dests[@]}"; do
+        mkdir -p "$(dirname "${dest}")"
+        if [[ -s "${dest}" ]]; then
+            saved_umask=$(umask)
+            umask 077
+            status=0
+            jq -s '.[0] * .[1]' "${dest}" "${pull_secret}" > "${dest}.tmp" || status=$?
+            umask "${saved_umask}"
+            if (( status != 0 )); then
+                rm -f "${dest}.tmp"
+                return "${status}"
+            fi
+            mv "${dest}.tmp" "${dest}"
+        else
+            install -m 600 "${pull_secret}" "${dest}"
+        fi
+        chmod 600 "${dest}"
+    done
+    if [[ "${HOME}" != /root ]]; then
+        owner="$(stat -c '%U:%G' "${HOME}")"
+        chown "${owner}" "${HOME}/.docker/config.json" "${HOME}/.config/containers/auth.json"
     fi
 }
 

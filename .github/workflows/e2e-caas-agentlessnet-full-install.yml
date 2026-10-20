@@ -24,11 +24,6 @@ on:
         required: false
         type: string
         default: "osac-ci-orchestrator"
-      tooling-check-cmds:
-        description: "Semicolon-separated commands to run/verify on the box before JIT registration."
-        required: false
-        type: string
-        default: "dnf install -y ansible-core python3-pip make; pip3 install ansible; command -v ansible-playbook; command -v make"
       osac-repo:
         description: "Override osac mono-repo git URI -- empty means upstream"
         required: false
@@ -117,14 +112,26 @@ jobs:
           run-id: ${{ github.run_id }}
 
       - name: Validate pull request metadata
-        if: (inputs.pr-number == '' && inputs.pr-sha != '') || (inputs.pr-number != '' && inputs.pr-sha == '')
+        if: >-
+          (inputs.pr-number == '' && inputs.pr-sha != '') ||
+          (inputs.pr-number != '' && inputs.pr-sha == '') ||
+          (inputs.test-infra-repository != '' &&
+           inputs.test-infra-repository != github.repository &&
+           inputs.test-infra-repository != job.workflow_repository &&
+           (inputs.pr-number == '' || inputs.pr-sha == '' ||
+            inputs.fork-pr-author-association == '' ||
+            inputs.test-infra-sha != inputs.pr-sha))
         shell: bash
         run: |
-          echo "::error::pr-number and pr-sha must be supplied together."
+          echo "::error::pr-number and pr-sha must be supplied together. A checkout of another repository also requires fork-pr-author-association and test-infra-sha set to that same pr-sha."
           exit 1
 
       - name: Authorize fork PR
-        if: inputs.fork-pr-author-association != ''
+        if: >-
+          inputs.fork-pr-author-association != '' ||
+          (inputs.test-infra-repository != '' &&
+           inputs.test-infra-repository != github.repository &&
+           inputs.test-infra-repository != job.workflow_repository)
         uses: ./.github/actions/authorize-fork-pr
         with:
           role-id: ${{ steps.setup.outputs.role-id }}
@@ -169,7 +176,7 @@ jobs:
       instance-type: ${{ inputs.instance-type }}
       aws-region: ${{ inputs.aws-region }}
       orchestrator-runner-label: ${{ inputs.orchestrator-runner-label }}
-      tooling-check-cmds: ${{ inputs.tooling-check-cmds }}
+      tooling-check-cmds: "dnf install -y ansible-core python3-pip make; pip3 install ansible; command -v ansible-playbook; command -v make"
       test-infra-repository: ${{ inputs.test-infra-repository }}
       test-infra-ref: ${{ inputs.test-infra-ref }}
       test-infra-sha: ${{ inputs.test-infra-sha }}
