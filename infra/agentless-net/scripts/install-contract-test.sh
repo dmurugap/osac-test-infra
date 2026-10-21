@@ -116,10 +116,10 @@ else
     bad "workflow does not sanitize diagnostics before upload"
 fi
 
-if grep -q "steps.sanitize-diagnostics.outcome == 'success'" "${workflow}"; then
-    ok "workflow uploads diagnostics only after the sanitizer succeeds"
+if grep -q "always() && steps.sanitize-diagnostics.outcome == 'success'" "${workflow}"; then
+    ok "workflow uploads diagnostics after a failed run only when the sanitizer succeeds"
 else
-    bad "workflow can upload diagnostics when the sanitizer fails"
+    bad "workflow drops sanitized diagnostics after a failed run or uploads when the sanitizer fails"
 fi
 
 if grep -A2 'sanitize_diagnostics.py' "${workflow}" | grep -q 'rm -rf "${stage}"'; then

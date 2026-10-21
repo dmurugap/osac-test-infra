@@ -81,8 +81,14 @@ _KUBE_SECRET = re.compile(
 _YAML_QUOTED_SECRET = re.compile(
     rb"(?im)^([ \t-]*(?<![A-Za-z0-9_-])(?:" + _SECRET_KEYS + rb"):)[ \t]+\"[^\"]*\""
 )
+# Optional backslashes cover JSON that a journal embeds as an escaped string.
 _JSON_SECRET = re.compile(
-    rb'(?i)("[A-Za-z0-9_.-]*(?:token|password|secret|auth|key-data|dockerconfigjson|api[_-]?key)[A-Za-z0-9_.-]*"\s*:\s*)"[^"]*"'
+    rb'(?i)(\\?"[A-Za-z0-9_.-]*(?:token|password|secret|auth|key-data|dockerconfigjson|api[_-]?key)[A-Za-z0-9_.-]*\\?"\s*:\s*)\\?"(?:[^"\\]|\\[^"])*\\?"'
+)
+# Compound keys such as QUAY_PASSWORD or aws_secret_access_key. Exact kubeconfig
+# keys stay on _KUBE_SECRET; this does not treat "token:" inside a sentence as a key.
+_COLON_SECRET = re.compile(
+    rb"(?im)^([ \t-]*[A-Za-z0-9_]*(?:password|secret|token)[A-Za-z0-9_]*:)[ \t]+(?!\[REDACTED\])\S.*$"
 )
 _BEARER = re.compile(rb"(?i)\bBearer\s+\S+")
 _BASIC = re.compile(rb"(?i)\bBasic\s+\S+")
@@ -121,6 +127,7 @@ _REPLACEMENTS = (
     (_JSON_SECRET, lambda m: m.group(1) + b'"' + REDACTED.encode() + b'"'),
     (_YAML_QUOTED_SECRET, lambda m: m.group(1) + b' "' + REDACTED.encode() + b'"'),
     (_KUBE_SECRET, lambda m: m.group(1) + b" " + REDACTED.encode()),
+    (_COLON_SECRET, lambda m: m.group(1) + b" " + REDACTED.encode()),
     (_BEARER, b"Bearer " + REDACTED.encode()),
     (_BASIC, b"Basic " + REDACTED.encode()),
     (_AWS_KEY, REDACTED.encode()),
@@ -162,7 +169,13 @@ _FORBIDDEN = (
     (
         "json-secret",
         re.compile(
-            rb'(?i)"[A-Za-z0-9_.-]*(?:token|password|secret|auth|key-data|dockerconfigjson|api[_-]?key)[A-Za-z0-9_.-]*"\s*:\s*"(?!\[REDACTED\])'
+            rb'(?i)\\?"[A-Za-z0-9_.-]*(?:token|password|secret|auth|key-data|dockerconfigjson|api[_-]?key)[A-Za-z0-9_.-]*\\?"\s*:\s*\\?"(?!\[REDACTED\])'
+        ),
+    ),
+    (
+        "colon-secret",
+        re.compile(
+            rb"(?im)^[ \t-]*[A-Za-z0-9_]*(?:password|secret|token)[A-Za-z0-9_]*:[ \t]+(?!\[REDACTED\])\S"
         ),
     ),
     ("aws-key", _AWS_KEY),
