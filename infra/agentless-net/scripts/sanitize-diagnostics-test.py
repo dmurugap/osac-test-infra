@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import contextlib
+import io
 import pathlib
 import sys
 import tempfile
@@ -221,12 +223,20 @@ def test_symlinks_are_refused() -> None:
         outside.write_text("do-not-touch\n")
         (root / "host/dmesg.log").symlink_to(outside)
         (root / "host/cloud-init.log").symlink_to(root / "missing")
-        try:
-            gate.sanitize_tree(root)
-        except SystemExit as exc:
-            _assert(exc.code == 1, f"symlink exited {exc.code}")
-            _assert(outside.read_text() == "do-not-touch\n", "symlink target was overwritten")
-            return
+        sensitive = root / "agentless-net/customer-cluster-nodes.txt"
+        sensitive.parent.mkdir()
+        sensitive.symlink_to(root / "missing")
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr):
+            try:
+                gate.sanitize_tree(root)
+            except SystemExit as exc:
+                _assert(exc.code == 1, f"symlink exited {exc.code}")
+                _assert(outside.read_text() == "do-not-touch\n", "symlink target was overwritten")
+                message = stderr.getvalue()
+                _assert("customer-cluster" not in message, f"refusal printed a raw path: {message}")
+                _assert("symlink" in message, f"refusal dropped the reason: {message}")
+                return
         raise AssertionError("symlink would be uploaded")
 
 

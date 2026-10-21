@@ -267,21 +267,29 @@ def _order_names(names: list[str]) -> list[bytes]:
     )
 
 
+def _safe_label(path: Path, root: Path) -> str:
+    try:
+        relative = path.relative_to(root).as_posix()
+    except ValueError:
+        relative = "outside"
+    return _digest_name("entry", relative)
+
+
 def sanitize_tree(root: Path) -> None:
     root = root.resolve()
     failures: list[str] = []
     entries = list(root.rglob("*"))
     for path in entries:
         if path.is_symlink():
-            failures.append(f"{path}: symlink")
+            failures.append(f"{_safe_label(path, root)}: symlink")
             continue
         try:
             resolved = path.resolve()
         except OSError:
-            failures.append(f"{path}: unreadable")
+            failures.append(f"{_safe_label(path, root)}: unreadable")
             continue
         if not resolved.is_relative_to(root):
-            failures.append(f"{path}: path escapes staging directory")
+            failures.append(f"{_safe_label(path, root)}: path escapes staging directory")
     if failures:
         _refuse(failures)
     files = sorted(path for path in entries if path.is_file())
@@ -293,7 +301,7 @@ def sanitize_tree(root: Path) -> None:
             digest = hashlib.sha256(str(path.relative_to(root)).encode()).hexdigest()[:12]
             dest = dest.with_name(f"log-{digest}")
         if dest in used:
-            failures.append(f"{path}: redacted name collision")
+            failures.append(f"{_safe_label(path, root)}: redacted name collision")
             continue
         used.add(dest)
         planned.append((path, dest))
