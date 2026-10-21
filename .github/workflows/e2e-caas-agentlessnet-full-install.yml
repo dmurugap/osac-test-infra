@@ -122,10 +122,14 @@ jobs:
            inputs.test-infra-repository != job.workflow_repository &&
            (inputs.pr-number == '' || inputs.pr-sha == '' ||
             inputs.fork-pr-author-association == '' ||
-            inputs.test-infra-sha != inputs.pr-sha))
+            inputs.fork-pr-author == '' ||
+            inputs.test-infra-sha != inputs.pr-sha)) ||
+          (inputs.fork-pr-author-association != '' &&
+           (inputs.pr-number == '' || inputs.pr-sha == '' ||
+            inputs.fork-pr-author == ''))
         shell: bash
         run: |
-          echo "::error::pr-number and pr-sha must be supplied together. A checkout of another repository also requires fork-pr-author-association and test-infra-sha set to that same pr-sha."
+          echo "::error::pr-number and pr-sha must be supplied together. Fork authorization or a checkout of another repository also requires fork-pr-author, fork-pr-author-association, and test-infra-sha set to that same pr-sha."
           exit 1
 
       - name: Authorize fork PR
@@ -150,12 +154,18 @@ jobs:
           EXPECTED_SHA: ${{ inputs.pr-sha }}
           EXPECTED_REF: ${{ inputs.pr-ref }}
           EXPECTED_REPOSITORY: ${{ inputs.pr-repository }}
+          EXPECTED_AUTHOR: ${{ inputs.fork-pr-author }}
+          EXPECTED_ASSOCIATION: ${{ inputs.fork-pr-author-association }}
+          CHECKOUT_REPOSITORY: ${{ inputs.test-infra-repository }}
+          WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
         run: |
           set -euo pipefail
           pr_json=$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}")
           actual_sha=$(jq -r '.head.sha' <<<"${pr_json}")
           actual_ref=$(jq -r '.head.ref' <<<"${pr_json}")
           actual_repository=$(jq -r '.head.repo.full_name' <<<"${pr_json}")
+          actual_author=$(jq -r '.user.login' <<<"${pr_json}")
+          actual_association=$(jq -r '.author_association' <<<"${pr_json}")
           [[ "${actual_sha}" == "${EXPECTED_SHA}" ]] || {
             echo "::error::PR head SHA changed; refusing to provision."
             exit 1
@@ -168,6 +178,21 @@ jobs:
             echo "::error::PR head ref changed; refusing to provision."
             exit 1
           }
+          [[ -z "${EXPECTED_AUTHOR}" || "${actual_author}" == "${EXPECTED_AUTHOR}" ]] || {
+            echo "::error::PR author does not match fork-pr-author; refusing to provision."
+            exit 1
+          }
+          [[ -z "${EXPECTED_ASSOCIATION}" || "${actual_association}" == "${EXPECTED_ASSOCIATION}" ]] || {
+            echo "::error::PR author association does not match; refusing to provision."
+            exit 1
+          }
+          if [[ -n "${CHECKOUT_REPOSITORY}" &&
+                "${CHECKOUT_REPOSITORY}" != "${GITHUB_REPOSITORY}" &&
+                "${CHECKOUT_REPOSITORY}" != "${WORKFLOW_REPOSITORY}" &&
+                "${actual_repository}" != "${CHECKOUT_REPOSITORY}" ]]; then
+            echo "::error::test-infra-repository is not the PR head repository; refusing to provision."
+            exit 1
+          fi
 
   provision:
     needs: authorize

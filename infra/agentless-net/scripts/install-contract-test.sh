@@ -140,6 +140,14 @@ else
     bad "provision or teardown checks out the code under test"
 fi
 
+if grep -q 'PR author does not match fork-pr-author' "${workflow}" \
+    && grep -q '.author_association' "${workflow}" \
+    && grep -q 'test-infra-repository is not the PR head repository' "${workflow}"; then
+    ok "workflow checks fork author metadata against the pull request"
+else
+    bad "workflow does not check fork author metadata against the pull request"
+fi
+
 if grep -q 'host_type_disposition' "${INFRA_DIR}/scripts/setup-caas.sh"; then
     ok "setup-caas.sh classifies host-type HTTP status"
 else
