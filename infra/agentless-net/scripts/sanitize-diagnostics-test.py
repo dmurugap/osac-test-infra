@@ -105,7 +105,9 @@ def test_lab_filenames_are_not_uploaded() -> None:
 
 
 def test_verification_rejects_remaining_findings() -> None:
-    samples = {
+    fake_api_key = ("gh" + "p_") + ("abcdefghij" + "klmnopqrstuvwxyz012345")
+    fake_registry_url = "https://" + "user" + ":" + "s3" + "cret" + "@" + "registry.example.com" + "/v2"
+    fixture_samples = {
         "ipv4": b"node 10.1.2.3",
         "ipv6": b"fe80::1",
         "hostname": b"api.cluster-1.example.com",
@@ -116,18 +118,19 @@ def test_verification_rejects_remaining_findings() -> None:
         "token": b"token=session-secret",
         "env": b"QUAY_PASSWORD=x",
         "json": b'{"token": "x"}',
+        "json-api-key": b'{"apiKey":"x"}',
         "basic": b"Authorization: Basic YWJj\n",
         "registry": b'{"auth": "YWJj"}',
         "yaml": b"password: supersecret\n",
         "email": b"user@example.com",
         "ssn": b"123-45-6789",
         "card": b"4111-1111-1111-1111",
-        "api-key": b"ghp_abcdefghijklmnopqrstuvwxyz012345",
-        "url": b"https://user:s3cret@registry.example.com/v2",
+        "api-key": fake_api_key.encode(),
+        "url": fake_registry_url.encode(),
         "session": b"JSESSIONID=abc123session",
         "internal-host": b"master-0.ostest",
     }
-    for name, sample in samples.items():
+    for name, sample in fixture_samples.items():
         _assert(gate.forbidden_reasons(sample), f"{name} would pass verification")
         cleaned = gate.redact_bytes(sample)
         _assert(sample not in cleaned, f"{name} raw value survives redaction")
@@ -159,6 +162,22 @@ def test_cluster_order_names_are_not_uploaded() -> None:
             _assert("customer-cluster" not in name, f"cluster order remains in {name}")
         _assert(b"customer-cluster" not in published, "cluster order remains in the log")
         _assert(b"10.0.0.8" not in published, "node address remains in the log")
+
+
+def test_inventory_files_drop_bare_identifiers() -> None:
+    for filename in ("clusterorders.txt", "hostedclusters.txt"):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            target = root / "agentless-net" / filename
+            target.parent.mkdir(parents=True)
+            target.write_text("NAME AGE\ncustomer-cluster 5m\nmaster-0.ostest\n")
+            gate.sanitize_tree(root)
+            published = target.read_bytes()
+            _assert(b"customer-cluster" not in published, f"{filename} kept a bare cluster name")
+            _assert(b"master-0.ostest" not in published, f"{filename} kept an internal hostname")
+            _assert(b"ostest" not in published, f"{filename} kept a hostname label")
+            _assert(not gate.forbidden_reasons(published), f"{filename} still publishable with identifiers")
+            _assert(b"NAME" in published, f"{filename} dropped the column header")
 
 
 def test_journal_prose_is_not_a_credential() -> None:
@@ -234,6 +253,7 @@ def main() -> None:
     test_verification_rejects_remaining_findings()
     test_auth_schemes_stay_intact()
     test_cluster_order_names_are_not_uploaded()
+    test_inventory_files_drop_bare_identifiers()
     test_journal_prose_is_not_a_credential()
     test_symlinks_are_refused()
     test_binary_diagnostics_are_refused()

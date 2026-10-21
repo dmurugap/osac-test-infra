@@ -39,6 +39,29 @@ _SAFE_FILES = frozenset(
 )
 _ORDER_FILE = re.compile(r"^(?P<order>.+)-(?:nodes|clusteroperators|unhealthy-pods)\.txt$")
 _GENERATED = re.compile(r"^(?:log|dir)-[0-9a-f]{12}$")
+# These collector names stay, but their contents are inventory: a bare cluster
+# or customer name is sensitive even when no order filename is present.
+_INVENTORY_FILES = frozenset({"clusterorders.txt", "hostedclusters.txt"})
+_INVENTORY_KEEP = frozenset(
+    {
+        b"NAME",
+        b"NAMESPACE",
+        b"AGE",
+        b"VERSION",
+        b"PHASE",
+        b"AVAILABLE",
+        b"PROGRESSING",
+        b"DEGRADED",
+        b"True",
+        b"False",
+        b"Ready",
+        b"Running",
+        b"Completed",
+        b"Unknown",
+        b"REDACTED",
+    }
+)
+_INVENTORY_TOKEN = re.compile(rb"[A-Za-z0-9][A-Za-z0-9_.-]{2,}")
 
 _PEM = re.compile(
     rb"-----BEGIN [A-Z0-9 ]+-----.*?-----END [A-Z0-9 ]+-----",
@@ -48,7 +71,7 @@ _PEM = re.compile(
 # sentence, and substrings such as oauth or x-auth, out of the credential rule.
 _SECRET_KEYS = (
     rb"certificate-authority-data|client-certificate-data|client-key-data|"
-    rb"token|password|client-secret|auth|\.dockerconfigjson"
+    rb"token|password|client-secret|auth|\.dockerconfigjson|api[_-]?key"
 )
 _KUBE_SECRET = re.compile(
     rb"(?im)^([ \t-]*\"?(?<![A-Za-z0-9_-])(?:"
@@ -59,7 +82,7 @@ _YAML_QUOTED_SECRET = re.compile(
     rb"(?im)^([ \t-]*(?<![A-Za-z0-9_-])(?:" + _SECRET_KEYS + rb"):)[ \t]+\"[^\"]*\""
 )
 _JSON_SECRET = re.compile(
-    rb'(?i)("[A-Za-z0-9_.-]*(?:token|password|secret|auth|key-data|dockerconfigjson)[A-Za-z0-9_.-]*"\s*:\s*)"[^"]*"'
+    rb'(?i)("[A-Za-z0-9_.-]*(?:token|password|secret|auth|key-data|dockerconfigjson|api[_-]?key)[A-Za-z0-9_.-]*"\s*:\s*)"[^"]*"'
 )
 _BEARER = re.compile(rb"(?i)\bBearer\s+\S+")
 _BASIC = re.compile(rb"(?i)\bBasic\s+\S+")
@@ -139,7 +162,7 @@ _FORBIDDEN = (
     (
         "json-secret",
         re.compile(
-            rb'(?i)"[A-Za-z0-9_.-]*(?:token|password|secret|auth|key-data|dockerconfigjson)[A-Za-z0-9_.-]*"\s*:\s*"(?!\[REDACTED\])'
+            rb'(?i)"[A-Za-z0-9_.-]*(?:token|password|secret|auth|key-data|dockerconfigjson|api[_-]?key)[A-Za-z0-9_.-]*"\s*:\s*"(?!\[REDACTED\])'
         ),
     ),
     ("aws-key", _AWS_KEY),
@@ -201,9 +224,21 @@ def _path_failures(relative: Path) -> list[str]:
     return failures
 
 
-def redact_file(data: bytes, orders: list[bytes]) -> bytes:
+def _redact_inventory(data: bytes) -> bytes:
+    def replace(match: re.Match[bytes]) -> bytes:
+        token = match.group(0)
+        if token in _INVENTORY_KEEP:
+            return token
+        return REDACTED.encode()
+
+    return _INVENTORY_TOKEN.sub(replace, data)
+
+
+def redact_file(data: bytes, orders: list[bytes], filename: str) -> bytes:
     for order in orders:
         data = data.replace(order, REDACTED.encode())
+    if filename in _INVENTORY_FILES:
+        data = _redact_inventory(data)
     return redact_bytes(data)
 
 
@@ -261,7 +296,7 @@ def sanitize_tree(root: Path) -> None:
         published.append((dest, original_name))
 
     orders = _order_names([original_name for _, original_name in published])
-    for path, _original_name in published:
+    for path, original_name in published:
         relative = path.relative_to(root)
         path_failures = _path_failures(relative)
         if path_failures:
@@ -271,7 +306,7 @@ def sanitize_tree(root: Path) -> None:
         if b"\x00" in raw:
             failures.append(f"{path}: binary file")
             continue
-        cleaned = redact_file(raw, orders)
+        cleaned = redact_file(raw, orders, original_name)
         path.write_bytes(cleaned)
         reasons = forbidden_reasons(cleaned)
         if any(order in cleaned for order in orders):
