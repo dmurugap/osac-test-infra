@@ -179,9 +179,8 @@ jobs:
       aws-region: ${{ inputs.aws-region }}
       orchestrator-runner-label: ${{ inputs.orchestrator-runner-label }}
       tooling-check-cmds: "dnf install -y ansible-core python3-pip make; pip3 install ansible; command -v ansible-playbook; command -v make"
-      test-infra-repository: ${{ inputs.test-infra-repository }}
-      test-infra-ref: ${{ inputs.test-infra-ref }}
-      test-infra-sha: ${{ inputs.test-infra-sha }}
+      # Runner scripts stay on this workflow revision. The e2e job is the
+      # only place that checks out the code under test.
 
   push-secrets:
     needs: provision
@@ -421,6 +420,3 @@ jobs:
       runner-id: ${{ needs.provision.outputs.runner-id }}
       orchestrator-runner-label: ${{ inputs.orchestrator-runner-label }}
       aws-region: ${{ inputs.aws-region }}
-      test-infra-repository: ${{ inputs.test-infra-repository }}
-      test-infra-ref: ${{ inputs.test-infra-ref }}
-      test-infra-sha: ${{ inputs.test-infra-sha }}

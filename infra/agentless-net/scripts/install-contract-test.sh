@@ -128,6 +128,18 @@ else
     bad "workflow keeps the staging directory when sanitizing fails"
 fi
 
+if awk '
+    /^  provision:/ {job="provision"}
+    /^  push-secrets:/ {job=""}
+    /^  teardown:/ {job="teardown"}
+    job != "" && /test-infra-(repository|ref|sha):/ {bad=1}
+    END {exit bad ? 1 : 0}
+' "${workflow}"; then
+    ok "provision and teardown stay on the workflow revision"
+else
+    bad "provision or teardown checks out the code under test"
+fi
+
 if grep -q 'host_type_disposition' "${INFRA_DIR}/scripts/setup-caas.sh"; then
     ok "setup-caas.sh classifies host-type HTTP status"
 else
