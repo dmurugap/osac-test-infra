@@ -76,7 +76,7 @@ _SECRET_KEYS = (
 _KUBE_SECRET = re.compile(
     rb"(?im)^([ \t-]*\"?(?<![A-Za-z0-9_-])(?:"
     + _SECRET_KEYS
-    + rb")\"?:)[ \t]+(?!\")(\S+)"
+    + rb")\"?:)[ \t]+(?!\")\S.*$"
 )
 _YAML_QUOTED_SECRET = re.compile(
     rb"(?im)^([ \t-]*(?<![A-Za-z0-9_-])(?:" + _SECRET_KEYS + rb"):)[ \t]+\"[^\"]*\""

@@ -126,6 +126,8 @@ def test_verification_rejects_remaining_findings() -> None:
         "basic": b"Authorization: Basic YWJj\n",
         "registry": b'{"auth": "YWJj"}',
         "yaml": b"password: supersecret\n",
+        "yaml-multiword": b"password: my secret phrase\n",
+        "auth-scheme": b"auth: Basic YWJj\n",
         "email": b"user@example.com",
         "ssn": b"123-45-6789",
         "card": b"4111-1111-1111-1111",
@@ -139,6 +141,12 @@ def test_verification_rejects_remaining_findings() -> None:
         cleaned = gate.redact_bytes(sample)
         _assert(sample not in cleaned, f"{name} raw value survives redaction")
         _assert(not gate.forbidden_reasons(cleaned), f"{name} remains after redaction: {cleaned!r}")
+    multiword = gate.redact_bytes(b"password: my secret phrase\n")
+    for part in (b"my", b"secret", b"phrase"):
+        _assert(part not in multiword, f"multi-word password kept {part!r}: {multiword!r}")
+    scheme = gate.redact_bytes(b"auth: Basic YWJj\n")
+    for part in (b"Basic", b"YWJj"):
+        _assert(part not in scheme, f"auth scheme value kept {part!r}: {scheme!r}")
     _assert(not gate.forbidden_reasons(b"15:55:01 bridge domain br_default"), "clock time looks sensitive")
 
 

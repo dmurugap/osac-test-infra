@@ -170,6 +170,14 @@ jobs:
             echo "::error::PR head SHA changed; refusing to provision."
             exit 1
           }
+          if [[ "${actual_repository}" != "${GITHUB_REPOSITORY}" ]]; then
+            # A fork head must go through Authorize fork PR and pin the checkout to the fork.
+            if [[ -z "${EXPECTED_ASSOCIATION}" || -z "${EXPECTED_AUTHOR}" ||
+                  "${CHECKOUT_REPOSITORY}" != "${actual_repository}" ]]; then
+              echo "::error::PR head is a fork; fork authorization metadata and test-infra-repository are required."
+              exit 1
+            fi
+          fi
           [[ -z "${EXPECTED_REPOSITORY}" || "${actual_repository}" == "${EXPECTED_REPOSITORY}" ]] || {
             echo "::error::PR head repository changed; refusing to provision."
             exit 1

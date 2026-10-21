@@ -148,6 +148,12 @@ else
     bad "workflow does not check fork author metadata against the pull request"
 fi
 
+if grep -q 'PR head is a fork; fork authorization metadata and test-infra-repository are required.' "${workflow}"; then
+    ok "workflow requires fork authorization when the pull request head is a fork"
+else
+    bad "workflow accepts a fork pull request head without fork authorization"
+fi
+
 if grep -q 'host_type_disposition' "${INFRA_DIR}/scripts/setup-caas.sh"; then
     ok "setup-caas.sh classifies host-type HTTP status"
 else
